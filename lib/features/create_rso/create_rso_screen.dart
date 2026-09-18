@@ -182,7 +182,8 @@ class _Form extends StatelessWidget {
         const SizedBox(height: 20),
         _Field(
           label: 'Description',
-          hint: "Describe your RSO's mission, activities, and what students "
+          hint:
+              "Describe your RSO's mission, activities, and what students "
               'can expect...',
           controller: descriptionController,
           maxLines: 4,
@@ -299,10 +300,7 @@ class _Confirmation extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            Text(
-              'Proposal Submitted!',
-              style: AppTheme.heading(size: 24),
-            ),
+            Text('Proposal Submitted!', style: AppTheme.heading(size: 24)),
             const SizedBox(height: 12),
             Text.rich(
               TextSpan(
@@ -317,7 +315,8 @@ class _Confirmation extends StatelessWidget {
                     ),
                   ),
                   const TextSpan(
-                    text: ' has been submitted to Uniandes Student Affairs '
+                    text:
+                        ' has been submitted to Uniandes Student Affairs '
                         'for review. You will receive a response within 5 '
                         'business days.',
                   ),

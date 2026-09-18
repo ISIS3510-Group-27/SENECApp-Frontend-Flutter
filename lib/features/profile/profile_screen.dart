@@ -278,11 +278,7 @@ class _AddInterestChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.add_rounded,
-                size: 13,
-                color: AppColors.accent,
-              ),
+              const Icon(Icons.add_rounded, size: 13, color: AppColors.accent),
               const SizedBox(width: 4),
               Text(
                 'Add',

@@ -23,7 +23,11 @@ class OfficialBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.check_rounded, size: 11, color: AppColors.background),
+          const Icon(
+            Icons.check_rounded,
+            size: 11,
+            color: AppColors.background,
+          ),
           const SizedBox(width: 3),
           Text(
             label,
