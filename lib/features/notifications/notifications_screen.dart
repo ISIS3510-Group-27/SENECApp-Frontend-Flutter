@@ -23,7 +23,12 @@ class NotificationsScreen extends StatelessWidget {
       body: Column(
         children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(kPageGutter, 12, kPageGutter, 16),
+            padding: const EdgeInsets.fromLTRB(
+              kPageGutter,
+              12,
+              kPageGutter,
+              16,
+            ),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: AppColors.borderStrong)),
             ),
@@ -34,10 +39,7 @@ class NotificationsScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        'Notifications',
-                        style: AppTheme.heading(size: 20),
-                      ),
+                      Text('Notifications', style: AppTheme.heading(size: 20)),
                       Text(
                         '$unread unread',
                         style: AppTheme.body(

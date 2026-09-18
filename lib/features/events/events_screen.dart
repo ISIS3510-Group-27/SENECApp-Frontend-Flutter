@@ -44,10 +44,7 @@ class _EventsScreenState extends State<EventsScreen> {
                   letterSpacing: 1.8,
                 ),
               ),
-              Text(
-                'SENECApp Events',
-                style: AppTheme.heading(size: 24),
-              ),
+              Text('SENECApp Events', style: AppTheme.heading(size: 24)),
             ],
           ),
         ),

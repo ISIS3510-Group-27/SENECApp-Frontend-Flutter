@@ -152,7 +152,10 @@ void main() {
 
     // No organization art has been added yet, so every slug falls back. This
     // flips to non-null as files land in assets/images/orgs/.
-    expect(AssetCatalog.orgImage('tennis_uniandes'), anyOf(isNull, isA<String>()));
+    expect(
+      AssetCatalog.orgImage('tennis_uniandes'),
+      anyOf(isNull, isA<String>()),
+    );
   });
 
   testWidgets('notifications can all be marked read', (tester) async {
