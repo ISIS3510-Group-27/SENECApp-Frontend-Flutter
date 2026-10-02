@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/auth/auth_service.dart';
 import '../../state/session_controller.dart';
+import '../shell/track_screen.dart';
 import 'auth_widgets.dart';
 
 /// Waits for the student to click the verification link. The backend only
@@ -26,7 +28,10 @@ class VerifyEmailScreen extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      TrackScreen(name: Screens.login, child: _buildScreen(context));
+
+  Widget _buildScreen(BuildContext context) {
     final session = context.watch<SessionController>();
 
     return Scaffold(

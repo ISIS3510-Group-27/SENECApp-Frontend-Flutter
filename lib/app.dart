@@ -27,6 +27,7 @@ class SenecApp extends StatelessWidget {
             auth: services.auth,
             me: services.me,
             api: services.api,
+            analytics: services.analytics,
           )..start(),
         ),
       ],

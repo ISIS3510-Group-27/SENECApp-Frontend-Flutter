@@ -69,6 +69,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Join RSO'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Join'));
+    await tester.pumpAndSettle();
 
     final view = backend.requestsTo('GET', '/groups/3').single.url;
     expect(view.queryParameters, {
@@ -76,10 +78,13 @@ void main() {
       'rec_request_id': FakeBackend.recRequestId,
     });
     final join = backend.requestsTo('POST', '/groups/3/join').single;
-    expect(jsonDecode(join.body), {
-      'entry_point': 'recommendation',
-      'rec_request_id': FakeBackend.recRequestId,
-    });
+    expect(
+      jsonDecode(join.body),
+      allOf(
+        containsPair('entry_point', 'recommendation'),
+        containsPair('rec_request_id', FakeBackend.recRequestId),
+      ),
+    );
 
     // Back on Discover, a group the student joined is no longer suggested.
     await tester.pageBack();

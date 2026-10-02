@@ -6,10 +6,12 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/check_in.dart';
 import '../../state/app_state.dart';
+import '../shell/track_screen.dart';
 
 /// Checks the student in by scanning the event's QR code (the camera) and,
 /// when they allow location, confirming they're near the venue (the GPS).
@@ -101,7 +103,14 @@ class _CheckInScreenState extends State<CheckInScreen> {
       setState(() => _result = result);
       appState.refreshAttendance();
     } on ApiException catch (e) {
-      if (mounted) setState(() => _refusal = e.message);
+      if (!mounted) return;
+      // A refusal (wrong code, too early, too far) is the check-in working as
+      // intended; only failures to reach the backend are errors.
+      final status = e.statusCode;
+      if (status == null || status >= 500) {
+        reportError(context, e, screen: Screens.checkInScanner);
+      }
+      setState(() => _refusal = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -113,7 +122,10 @@ class _CheckInScreenState extends State<CheckInScreen> {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      TrackScreen(name: Screens.checkInScanner, child: _buildScreen(context));
+
+  Widget _buildScreen(BuildContext context) {
     final event = widget.event;
 
     return Scaffold(

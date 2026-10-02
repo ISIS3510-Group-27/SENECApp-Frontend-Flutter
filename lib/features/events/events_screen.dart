@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/entry_point.dart';
@@ -15,6 +16,8 @@ import '../../state/app_state.dart';
 import '../check_in/check_in_screen.dart';
 import '../event_detail/event_detail_screen.dart';
 import '../free_now/free_now_screen.dart';
+import '../shell/home_shell.dart';
+import '../shell/track_screen.dart';
 
 /// Every upcoming event, filterable down to the student's own
 ///  organizations.
@@ -67,7 +70,9 @@ class _EventsScreenState extends State<EventsScreen> {
       );
       if (mounted) setState(() => _events[joinedOnly] = events);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _errors[joinedOnly] = e.message);
+      if (!mounted) return;
+      reportError(context, e, screen: Screens.events);
+      setState(() => _errors[joinedOnly] = e.message);
     }
   }
 
@@ -86,7 +91,14 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TrackScreen(
+    name: Screens.events,
+    tab: AppTab.events,
+    ready: _events.containsKey(_joinedOnly) || _errors.containsKey(_joinedOnly),
+    child: _buildScreen(context),
+  );
+
+  Widget _buildScreen(BuildContext context) {
     final events = _events[_joinedOnly];
     final error = _errors[_joinedOnly];
 

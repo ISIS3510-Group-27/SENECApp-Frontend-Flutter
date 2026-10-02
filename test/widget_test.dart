@@ -62,6 +62,8 @@ void main() {
     expect(find.text('Join RSO'), findsOneWidget);
     await tester.tap(find.text('Join RSO'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Join'));
+    await tester.pumpAndSettle();
 
     expect(find.textContaining('Joined'), findsWidgets);
 

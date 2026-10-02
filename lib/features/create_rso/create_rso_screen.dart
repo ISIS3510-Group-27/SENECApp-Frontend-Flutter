@@ -4,7 +4,9 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/models/rso_category.dart';
+import '../shell/track_screen.dart';
 
 /// The proposal form for a new organization.
 ///
@@ -40,7 +42,10 @@ class _CreateRsoScreenState extends State<CreateRsoScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      TrackScreen(name: Screens.createGroup, child: _buildScreen(context));
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       body: _submitted
           ? _Confirmation(

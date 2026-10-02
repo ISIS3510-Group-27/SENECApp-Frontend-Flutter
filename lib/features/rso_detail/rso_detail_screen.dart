@@ -9,12 +9,15 @@ import '../../core/widgets/badges.dart';
 import '../../core/widgets/org_image.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/rso.dart';
 import '../../state/app_state.dart';
 import '../event_detail/event_detail_screen.dart';
+import '../shell/track_screen.dart';
+import 'join_form_sheet.dart';
 
 /// Level two of the hierarchy, and the deepest the app goes: from here the
 /// student can join, which is the whole point of Discover.
@@ -80,12 +83,20 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
       );
       if (mounted) setState(() => _detail = detail);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (!mounted) return;
+      reportError(context, e, screen: Screens.groupDetail);
+      setState(() => _error = e.message);
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TrackScreen(
+    name: Screens.groupDetail,
+    ready: _detail != null || _error != null,
+    child: _buildScreen(context),
+  );
+
+  Widget _buildScreen(BuildContext context) {
     final rso = _detail ?? widget.preview;
 
     if (rso == null) {
@@ -214,6 +225,9 @@ class _Cover extends StatelessWidget {
     try {
       await context.read<AppState>().toggleSave(rso, source: 'group_detail');
     } on ApiException catch (e) {
+      if (context.mounted) {
+        reportError(context, e, screen: Screens.groupDetail);
+      }
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
@@ -539,24 +553,20 @@ class _JoinCta extends StatefulWidget {
 }
 
 class _JoinCtaState extends State<_JoinCta> {
-  bool _joining = false;
-
+  /// Joining goes through the form (BQ7), which reports its own progress and
+  /// errors.
   Future<void> _join() async {
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _joining = true);
-    try {
-      await context.read<AppState>().join(
-        widget.rso,
-        entryPoint: widget.entryPoint,
-        recRequestId: widget.recRequestId,
-      );
+    final joined = await JoinFormSheet.show(
+      context,
+      rso: widget.rso,
+      entryPoint: widget.entryPoint,
+      recRequestId: widget.recRequestId,
+    );
+    if (joined ?? false) {
       messenger.showSnackBar(
         SnackBar(content: Text('Welcome to ${widget.rso.name}!')),
       );
-    } on ApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => _joining = false);
     }
   }
 
@@ -585,29 +595,19 @@ class _JoinCtaState extends State<_JoinCta> {
           borderRadius: BorderRadius.circular(AppRadius.card),
           child: InkWell(
             borderRadius: BorderRadius.circular(AppRadius.card),
-            onTap: joined || _joining ? null : _join,
+            onTap: joined ? null : _join,
             child: Container(
               width: double.infinity,
               height: 54,
               alignment: Alignment.center,
-              child: _joining
-                  ? const SizedBox.square(
-                      dimension: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Text(
-                      joined ? '✓ Joined - Welcome!' : 'Join RSO',
-                      style: AppTheme.heading(
-                        size: 16,
-                        weight: FontWeight.w700,
-                        color: joined
-                            ? AppColors.mutedForeground
-                            : Colors.white,
-                      ),
-                    ),
+              child: Text(
+                joined ? '✓ Joined - Welcome!' : 'Join RSO',
+                style: AppTheme.heading(
+                  size: 16,
+                  weight: FontWeight.w700,
+                  color: joined ? AppColors.mutedForeground : Colors.white,
+                ),
+              ),
             ),
           ),
         ),

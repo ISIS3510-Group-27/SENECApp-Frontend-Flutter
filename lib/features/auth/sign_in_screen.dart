@@ -6,7 +6,9 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../state/session_controller.dart';
+import '../shell/track_screen.dart';
 import 'auth_widgets.dart';
 
 /// Sign in, or create an account, with a university email.
@@ -50,7 +52,10 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      TrackScreen(name: Screens.login, child: _buildScreen(context));
+
+  Widget _buildScreen(BuildContext context) {
     final session = context.watch<SessionController>();
     final devMode = AppConfig.authMode == AuthMode.dev;
 

@@ -46,6 +46,9 @@ class ApiClient {
   final http.Client _http;
   final Duration timeout;
 
+  /// The app and device details sent with every request.
+  ClientContext get context => _context;
+
   /// Called when the backend still answers 401 after a fresh token: the
   /// session is gone and the student has to sign in again.
   VoidCallback? onUnauthorized;

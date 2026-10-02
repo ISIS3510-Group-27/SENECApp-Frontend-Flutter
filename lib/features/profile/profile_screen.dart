@@ -6,11 +6,14 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/student_profile.dart';
 import '../../state/app_state.dart';
 import '../../state/session_controller.dart';
 import '../schedule/schedule_screen.dart';
+import '../shell/home_shell.dart';
+import '../shell/track_screen.dart';
 
 /// The student's own page: identity, interests and account settings.
 class ProfileScreen extends StatelessWidget {
@@ -24,7 +27,13 @@ class ProfileScreen extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TrackScreen(
+    name: Screens.profile,
+    tab: AppTab.profile,
+    child: _buildScreen(context),
+  );
+
+  Widget _buildScreen(BuildContext context) {
     final state = context.watch<AppState>();
     final student = state.student;
 
@@ -399,6 +408,7 @@ class _LocationRow extends StatelessWidget {
     try {
       await context.read<AppState>().setLocationOptIn(optIn);
     } on ApiException catch (e) {
+      if (context.mounted) reportError(context, e, screen: Screens.profile);
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }
   }

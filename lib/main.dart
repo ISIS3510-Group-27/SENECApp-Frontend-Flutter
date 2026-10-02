@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -23,5 +25,20 @@ Future<void> main() async {
     ),
   );
 
-  runApp(SenecApp(services: await AppServices.create()));
+  final services = await AppServices.create();
+
+  // Errors nobody caught go to the analytics queue, which is saved on the
+  // phone right away: if the app dies, they are sent on the next launch
+  // (BQ1, BQ14). Framework errors (a layout overflow...) don't stop the app;
+  // uncaught exceptions count as crashes.
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    services.analytics.error(details.exception);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    services.analytics.error(error, fatal: true);
+    return false; // Still reported the usual way.
+  };
+
+  runApp(SenecApp(services: services));
 }

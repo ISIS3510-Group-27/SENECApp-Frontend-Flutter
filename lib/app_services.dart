@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/config/app_config.dart';
 import 'core/widgets/qr_camera.dart';
+import 'data/analytics/analytics.dart';
 import 'data/api/api_client.dart';
 import 'data/api/client_context.dart';
 import 'data/auth/auth_service.dart';
@@ -25,7 +26,9 @@ class AppServices {
     required this.api,
     this.location = const GeolocatorLocationService(),
     this.qrCamera = mobileScannerCamera,
-  }) : me = MeRepository(api),
+    Analytics? analytics,
+  }) : analytics = analytics ?? Analytics(api: api, context: api.context),
+       me = MeRepository(api),
        groups = GroupsRepository(api),
        events = EventsRepository(api),
        notifications = NotificationsRepository(api),
@@ -40,6 +43,10 @@ class AppServices {
 
   /// The phone's camera, for scanning check-in codes.
   final QrCameraBuilder qrCamera;
+
+  /// Screen views, errors and join forms, for the business questions.
+  final Analytics analytics;
+
   final MeRepository me;
   final GroupsRepository groups;
   final EventsRepository events;
@@ -48,6 +55,7 @@ class AppServices {
   final RecommendationsRepository recommendations;
 
   static Future<AppServices> create() async {
+    final prefs = await SharedPreferences.getInstance();
     final AuthService auth;
     switch (AppConfig.authMode) {
       case AuthMode.firebase:
@@ -56,19 +64,29 @@ class AppServices {
         await Firebase.initializeApp();
         auth = FirebaseAuthService();
       case AuthMode.dev:
-        auth = DevAuthService(await SharedPreferences.getInstance());
+        auth = DevAuthService(prefs);
     }
 
     final context = await ClientContext.load()
       ..attach();
 
-    return AppServices(
+    final api = ApiClient(
+      baseUrl: AppConfig.apiBaseUrl,
       auth: auth,
-      api: ApiClient(
-        baseUrl: AppConfig.apiBaseUrl,
-        auth: auth,
-        context: context,
-      ),
+      context: context,
     );
+
+    // Whatever the last run couldn't send (offline, or a crash) goes first.
+    final analytics = Analytics(
+      api: api,
+      context: context,
+      store: PrefsAnalyticsStore(prefs),
+    );
+    await analytics.restore();
+    analytics
+      ..start()
+      ..flush();
+
+    return AppServices(auth: auth, api: api, analytics: analytics);
   }
 }

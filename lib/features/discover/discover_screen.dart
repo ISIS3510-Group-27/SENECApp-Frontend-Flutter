@@ -13,6 +13,7 @@ import '../../core/widgets/org_image.dart';
 import '../../core/widgets/rso_list_tile.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/group_filters.dart';
@@ -24,6 +25,8 @@ import '../../state/app_state.dart';
 import '../notifications/notifications_screen.dart';
 import '../recommendations/recommendations_screen.dart';
 import '../rso_detail/rso_detail_screen.dart';
+import '../shell/home_shell.dart';
+import '../shell/track_screen.dart';
 import 'filters_sheet.dart';
 
 /// Landing tab: search, filter, browse, open
@@ -96,9 +99,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         _recommendations = recommendations;
         _recommendationsFailed = false;
       });
-    } on ApiException {
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      reportError(context, e, screen: Screens.discover);
       // Popular groups take the carousel's place.
-      if (mounted) setState(() => _recommendationsFailed = true);
+      setState(() => _recommendationsFailed = true);
     }
   }
 
@@ -124,6 +129,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       });
     } on ApiException catch (e) {
       if (!mounted || searchId != _searchId) return;
+      reportError(context, e, screen: Screens.discover);
       setState(() => _error = e.message);
     } finally {
       if (mounted && searchId == _searchId) setState(() => _loading = false);
@@ -175,7 +181,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TrackScreen(
+    name: Screens.discover,
+    tab: AppTab.discover,
+    ready: _results != null || _error != null,
+    child: _buildScreen(context),
+  );
+
+  Widget _buildScreen(BuildContext context) {
     final results = _results;
     final state = context.watch<AppState>();
     // Groups joined since the list was fetched stop being suggestions.

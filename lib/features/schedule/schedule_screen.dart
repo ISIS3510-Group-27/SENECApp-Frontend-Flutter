@@ -8,10 +8,12 @@ import '../../core/widgets/async_states.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/catalog.dart';
 import '../../data/models/schedule_block.dart';
 import '../../data/repositories/catalog_repository.dart';
+import '../shell/track_screen.dart';
 
 /// The student's weekly classes.
 ///
@@ -46,7 +48,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       final blocks = await context.read<AppServices>().me.schedule();
       if (mounted) setState(() => _blocks = _sorted(blocks));
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (!mounted) return;
+      reportError(context, e, screen: Screens.schedule);
+      setState(() => _error = e.message);
     }
   }
 
@@ -92,6 +96,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       });
       messenger.showSnackBar(const SnackBar(content: Text('Schedule saved.')));
     } on ApiException catch (e) {
+      if (mounted) reportError(context, e, screen: Screens.schedule);
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -124,7 +129,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TrackScreen(
+    name: Screens.schedule,
+    ready: _blocks != null || _error != null,
+    child: _buildScreen(context),
+  );
+
+  Widget _buildScreen(BuildContext context) {
     final blocks = _blocks;
 
     return PopScope(

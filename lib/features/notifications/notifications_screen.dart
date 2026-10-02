@@ -5,10 +5,12 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/models/app_notification.dart';
 import '../../data/models/entry_point.dart';
 import '../../state/app_state.dart';
 import '../rso_detail/rso_detail_screen.dart';
+import '../shell/track_screen.dart';
 
 /// The notification inbox, reached from the bell on Discover.
 ///
@@ -30,7 +32,15 @@ class NotificationsScreen extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TrackScreen(
+    name: Screens.notifications,
+    ready: context.select<AppState, bool>(
+      (s) => s.notifications != null || s.notificationsError != null,
+    ),
+    child: _buildScreen(context),
+  );
+
+  Widget _buildScreen(BuildContext context) {
     final state = context.watch<AppState>();
     final unread = state.unreadCount;
     final notifications = state.notifications;

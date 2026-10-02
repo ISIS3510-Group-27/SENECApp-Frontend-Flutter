@@ -3,12 +3,13 @@ import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../app_services.dart';
+import '../../core/format/dates.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/format/dates.dart';
 import '../../core/widgets/async_states.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/check_in.dart';
@@ -16,6 +17,7 @@ import '../../data/models/entry_point.dart';
 import '../../state/app_state.dart';
 import '../check_in/check_in_screen.dart';
 import '../rso_detail/rso_detail_screen.dart';
+import '../shell/track_screen.dart';
 
 /// One event: when, where, who hosts it.
 ///
@@ -81,7 +83,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       setState(() => _event = event);
       _loadOrganizerCode(event);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (!mounted) return;
+      reportError(context, e, screen: Screens.eventDetail);
+      setState(() => _error = e.message);
     }
   }
 
@@ -113,7 +117,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TrackScreen(
+    name: Screens.eventDetail,
+    ready: _event != null || _error != null,
+    child: _buildScreen(context),
+  );
+
+  Widget _buildScreen(BuildContext context) {
     final event = _event ?? widget.preview;
 
     return Scaffold(

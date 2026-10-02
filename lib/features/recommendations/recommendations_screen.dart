@@ -5,10 +5,12 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/rso_list_tile.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/recommendation.dart';
 import '../../state/app_state.dart';
 import '../rso_detail/rso_detail_screen.dart';
+import '../shell/track_screen.dart';
 
 /// Every group recommended on Discover, each with all its reasons.
 ///
@@ -26,7 +28,10 @@ class RecommendationsScreen extends StatelessWidget {
       );
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      TrackScreen(name: Screens.recommendations, child: _buildScreen(context));
+
+  Widget _buildScreen(BuildContext context) {
     final state = context.watch<AppState>();
     // A group joined from here stops being a suggestion.
     final items = [

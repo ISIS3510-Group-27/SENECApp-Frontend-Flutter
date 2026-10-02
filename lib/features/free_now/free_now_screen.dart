@@ -9,6 +9,7 @@ import '../../core/widgets/async_states.dart';
 import '../../core/widgets/badges.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/location/location_service.dart';
 import '../../data/models/entry_point.dart';
@@ -16,6 +17,7 @@ import '../../data/models/free_now.dart';
 import '../../state/app_state.dart';
 import '../event_detail/event_detail_screen.dart';
 import '../schedule/schedule_screen.dart';
+import '../shell/track_screen.dart';
 
 /// "I have a gap between classes, what's on nearby?"
 ///
@@ -77,7 +79,9 @@ class _FreeNowScreenState extends State<FreeNowScreen> {
         _locationProblem = fix?.problem;
       });
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (!mounted) return;
+      reportError(context, e, screen: Screens.freeNow);
+      setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -88,6 +92,7 @@ class _FreeNowScreenState extends State<FreeNowScreen> {
     try {
       await context.read<AppState>().setLocationOptIn(true);
     } on ApiException catch (e) {
+      if (mounted) reportError(context, e, screen: Screens.freeNow);
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
       return;
     }
@@ -100,7 +105,13 @@ class _FreeNowScreenState extends State<FreeNowScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TrackScreen(
+    name: Screens.freeNow,
+    ready: _askingConsent || _result != null || _error != null,
+    child: _buildScreen(context),
+  );
+
+  Widget _buildScreen(BuildContext context) {
     final result = _result;
 
     return Scaffold(

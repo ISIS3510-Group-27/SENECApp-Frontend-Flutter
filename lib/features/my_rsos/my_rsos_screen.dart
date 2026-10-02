@@ -7,17 +7,29 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
 import '../../core/widgets/org_image.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/rso.dart';
 import '../../state/app_state.dart';
 import '../rso_detail/rso_detail_screen.dart';
+import '../shell/home_shell.dart';
+import '../shell/track_screen.dart';
 
 /// The student's own memberships, with a semester summary on top.
 class MyRsosScreen extends StatelessWidget {
   const MyRsosScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TrackScreen(
+    name: Screens.myGroups,
+    tab: AppTab.myRsos,
+    ready: context.select<AppState, bool>(
+      (s) => s.myGroups != null || s.myGroupsError != null,
+    ),
+    child: _buildScreen(context),
+  );
+
+  Widget _buildScreen(BuildContext context) {
     final state = context.watch<AppState>();
     final joined = state.myGroups;
 

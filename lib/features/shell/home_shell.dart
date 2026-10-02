@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
@@ -29,6 +30,13 @@ enum AppTab {
   final IconData activeIcon;
 }
 
+/// Which tab is showing. Every tab stays built (so each keeps its scroll
+/// position and filters), so a tab's screen asks this whether the student can
+/// actually see it, e.g. before counting a screen view.
+class TabSelection extends ValueNotifier<AppTab> {
+  TabSelection([super.value = AppTab.discover]);
+}
+
 /// Hosts the bottom navigation bar and one [Navigator] per tab.
 ///
 /// The per-tab navigator is what makes reverse navigation *contextual*: opening
@@ -43,7 +51,17 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  AppTab _current = AppTab.discover;
+  final _selection = TabSelection();
+
+  AppTab get _current => _selection.value;
+
+  set _current(AppTab tab) => _selection.value = tab;
+
+  @override
+  void dispose() {
+    _selection.dispose();
+    super.dispose();
+  }
 
   final _navigatorKeys = {
     for (final tab in AppTab.values) tab: GlobalKey<NavigatorState>(),
@@ -79,23 +97,26 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: _handleBack,
-      child: Scaffold(
-        body: SafeArea(
-          bottom: false,
-          child: IndexedStack(
-            index: _current.index,
-            children: [
-              for (final tab in AppTab.values)
-                _TabNavigator(navigatorKey: _navigatorKeys[tab]!, tab: tab),
-            ],
+    return ChangeNotifierProvider.value(
+      value: _selection,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: _handleBack,
+        child: Scaffold(
+          body: SafeArea(
+            bottom: false,
+            child: IndexedStack(
+              index: _current.index,
+              children: [
+                for (final tab in AppTab.values)
+                  _TabNavigator(navigatorKey: _navigatorKeys[tab]!, tab: tab),
+              ],
+            ),
           ),
-        ),
-        bottomNavigationBar: _BottomNav(
-          current: _current,
-          onSelected: _onTabSelected,
+          bottomNavigationBar: _BottomNav(
+            current: _current,
+            onSelected: _onTabSelected,
+          ),
         ),
       ),
     );

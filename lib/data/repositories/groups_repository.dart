@@ -52,14 +52,22 @@ class GroupsRepository {
 
   Future<void> unsave(int id) => _api.delete('/groups/$id/save');
 
-  /// Joins the group. [entryPoint] is how the profile was reached (BQ6).
+  /// Submits the join form. [entryPoint] is how the profile was reached
+  /// (BQ6); [joinAttemptId] is the id the form was opened with (BQ7).
   Future<void> join(
     int id, {
     required EntryPoint entryPoint,
     String? recRequestId,
+    String? joinAttemptId,
+    String? motivation,
   }) => _api.post(
     '/groups/$id/join',
-    body: {'entry_point': entryPoint.name, 'rec_request_id': ?recRequestId},
+    body: {
+      'entry_point': entryPoint.name,
+      'rec_request_id': ?recRequestId,
+      'join_attempt_id': ?joinAttemptId,
+      'motivation': ?motivation,
+    },
   );
 
   /// Groups the student is an active member of, most recently joined first.

@@ -53,12 +53,14 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Join RSO'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Join'));
+      await tester.pumpAndSettle();
 
       final views = backend.requestsTo('GET', '/groups/3');
       expect(views, hasLength(1), reason: 'each fetch is logged as a view');
       expect(views.single.url.queryParameters['entry_point'], 'explore');
       final join = backend.requestsTo('POST', '/groups/3/join').single;
-      expect(jsonDecode(join.body), {'entry_point': 'explore'});
+      expect(jsonDecode(join.body), containsPair('entry_point', 'explore'));
       expect(find.text('✓ Joined - Welcome!'), findsOneWidget);
     });
 

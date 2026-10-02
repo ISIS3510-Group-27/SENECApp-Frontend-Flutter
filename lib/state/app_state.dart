@@ -106,11 +106,15 @@ class AppState extends ChangeNotifier {
     Rso rso, {
     required EntryPoint entryPoint,
     String? recRequestId,
+    String? joinAttemptId,
+    String? motivation,
   }) async {
     await _groups.join(
       rso.id,
       entryPoint: entryPoint,
       recRequestId: recRequestId,
+      joinAttemptId: joinAttemptId,
+      motivation: motivation,
     );
     _memberIds.add(rso.id);
     _membershipVersion++;

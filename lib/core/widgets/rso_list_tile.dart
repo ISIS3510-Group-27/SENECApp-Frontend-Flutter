@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../app_services.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/rso.dart';
 import '../../state/app_state.dart';
@@ -116,6 +117,8 @@ class _LikeButton extends StatelessWidget {
     try {
       await context.read<AppState>().toggleSave(rso, source: source);
     } on ApiException catch (e) {
+      // Filed under whichever screen the list is on.
+      if (context.mounted) context.read<AppServices>().analytics.error(e);
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }
   }

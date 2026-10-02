@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../core/config/app_config.dart';
+import '../data/analytics/analytics.dart';
 import '../data/api/api_client.dart';
 import '../data/auth/auth_service.dart';
 import '../data/models/student_profile.dart';
@@ -34,13 +35,16 @@ class SessionController extends ChangeNotifier {
     required AuthService auth,
     required MeRepository me,
     required ApiClient api,
+    Analytics? analytics,
   }) : _auth = auth,
-       _me = me {
+       _me = me,
+       _analytics = analytics {
     api.onUnauthorized = _onUnauthorized;
   }
 
   final AuthService _auth;
   final MeRepository _me;
+  final Analytics? _analytics;
 
   SessionStatus _status = SessionStatus.starting;
   AuthAccount? _account;
@@ -113,6 +117,13 @@ class SessionController extends ChangeNotifier {
   Future<void> retry() => _loadProfile();
 
   Future<void> signOut({String? reason}) async {
+    // Events still queued are sent with this student's token, so the next
+    // account to sign in on this phone doesn't inherit them. Best effort.
+    try {
+      await _analytics?.flush().timeout(const Duration(seconds: 5));
+    } on Object {
+      // Kept for the next flush.
+    }
     await _auth.signOut();
     _account = null;
     _student = null;
@@ -139,6 +150,7 @@ class SessionController extends ChangeNotifier {
         // verified...). Its reason is the most useful thing to show.
         await signOut(reason: e.message);
       } else {
+        _analytics?.error(e, screen: Screens.login);
         _error = e.message;
         _setStatus(SessionStatus.profileFailed);
       }

@@ -73,6 +73,12 @@ class FakeBackend {
   /// When true, every request fails as if the server were unreachable.
   bool offline = false;
 
+  /// Paths (after `/api/v1`) that answer 500, e.g. `/groups`.
+  final Set<String> failing = {};
+
+  /// Every client analytics event received, oldest first.
+  final List<Map<String, dynamic>> analyticsEvents = [];
+
   /// When true, only the recommender fails (500).
   bool recommenderDown = false;
 
@@ -375,12 +381,20 @@ class FakeBackend {
   Future<http.Response> _handle(http.Request request) async {
     requests.add(request);
     if (offline) throw http.ClientException('Connection refused');
+    if (failing.contains(request.url.path.replaceFirst('/api/v1', ''))) {
+      return jsonResponse({'detail': 'Internal Server Error'}, 500);
+    }
 
     final path = request.url.path.replaceFirst('/api/v1', '');
     final segments = path.split('/').where((s) => s.isNotEmpty).toList();
     final query = request.url.queryParametersAll;
 
     switch ((request.method, segments)) {
+      case ('POST', ['analytics', 'events']):
+        final events = (jsonDecode(request.body) as Map)['events'] as List;
+        analyticsEvents.addAll(events.cast<Map<String, dynamic>>());
+        return jsonResponse({'accepted': events.length, 'duplicates': 0}, 202);
+
       case ('GET', ['me']):
         return jsonResponse(me, meStatus);
 
