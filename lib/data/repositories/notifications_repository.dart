@@ -26,4 +26,14 @@ class NotificationsRepository {
 
   /// The student cleared it without opening it.
   Future<void> dismiss(int id) => _api.post('/me/notifications/$id/dismiss');
+
+  /// Lets the backend push to this phone. [platform] is `android` or `ios`.
+  Future<void> registerDevice(String token, {String? platform}) => _api.post(
+    '/me/devices',
+    body: {'token': token, 'platform': ?platform, 'app': 'flutter'},
+  );
+
+  /// Stops pushes to this phone for the signed-in student.
+  Future<void> unregisterDevice(String token) =>
+      _api.delete('/me/devices/${Uri.encodeComponent(token)}');
 }

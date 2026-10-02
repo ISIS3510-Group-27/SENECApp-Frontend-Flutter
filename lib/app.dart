@@ -9,6 +9,7 @@ import 'features/auth/sign_in_screen.dart';
 import 'features/auth/verify_email_screen.dart';
 import 'features/shell/home_shell.dart';
 import 'state/app_state.dart';
+import 'state/push_registration.dart';
 import 'state/session_controller.dart';
 
 /// Wires the services, session and theme around the navigation shell.
@@ -28,6 +29,11 @@ class SenecApp extends StatelessWidget {
             me: services.me,
             api: services.api,
             analytics: services.analytics,
+            push: PushRegistration(
+              push: services.push,
+              notifications: services.notifications,
+              platform: services.api.context.platform,
+            ),
           )..start(),
         ),
       ],

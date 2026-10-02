@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/config/app_config.dart';
@@ -10,6 +11,7 @@ import 'data/auth/auth_service.dart';
 import 'data/auth/dev_auth_service.dart';
 import 'data/auth/firebase_auth_service.dart';
 import 'data/location/location_service.dart';
+import 'data/push/push_service.dart';
 import 'data/repositories/catalog_repository.dart';
 import 'data/repositories/events_repository.dart';
 import 'data/repositories/groups_repository.dart';
@@ -27,6 +29,7 @@ class AppServices {
     this.location = const GeolocatorLocationService(),
     this.qrCamera = mobileScannerCamera,
     Analytics? analytics,
+    this.push = const DisabledPushService(),
   }) : analytics = analytics ?? Analytics(api: api, context: api.context),
        me = MeRepository(api),
        groups = GroupsRepository(api),
@@ -46,6 +49,9 @@ class AppServices {
 
   /// Screen views, errors and join forms, for the business questions.
   final Analytics analytics;
+
+  /// Push notifications; switched off until Firebase is configured.
+  final PushService push;
 
   final MeRepository me;
   final GroupsRepository groups;
@@ -87,6 +93,14 @@ class AppServices {
       ..start()
       ..flush();
 
-    return AppServices(auth: auth, api: api, analytics: analytics);
+    return AppServices(
+      auth: auth,
+      api: api,
+      analytics: analytics,
+      // Firebase was initialized above, with sign-in.
+      push: AppConfig.firebaseEnabled && !kIsWeb
+          ? FirebasePushService()
+          : const DisabledPushService(),
+    );
   }
 }

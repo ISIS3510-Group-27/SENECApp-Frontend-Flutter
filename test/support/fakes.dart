@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:senecapp/data/api/api_client.dart';
 import 'package:senecapp/data/api/client_context.dart';
 import 'package:senecapp/data/auth/auth_service.dart';
 import 'package:senecapp/data/location/location_service.dart';
+import 'package:senecapp/data/push/push_service.dart';
 
 import 'fake_backend.dart';
 
@@ -128,12 +130,14 @@ AppServices testServices({
   http.Client? backend,
   LocationService? location,
   FakeQrCamera? camera,
+  PushService? push,
 }) {
   final fakeAuth = auth ?? FakeAuthService();
   return AppServices(
     auth: fakeAuth,
     location: location ?? FakeLocationService(),
     qrCamera: (camera ?? FakeQrCamera()).build,
+    push: push ?? const DisabledPushService(),
     api: ApiClient(
       baseUrl: 'http://test/api/v1',
       auth: fakeAuth,
@@ -204,4 +208,46 @@ class FakeQrCamera {
       find.byKey(const Key('fake-camera')).evaluate().isNotEmpty;
 
   void scan(String text) => _onCode!(text);
+}
+
+/// FCM, with pushes, taps and new tokens delivered by the test.
+class FakePushService implements PushService {
+  FakePushService({this.currentToken = 'fcm-token-1', this.launchPush});
+
+  /// What [token] returns; null when the student refused notifications.
+  String? currentToken;
+
+  /// The push the app was "launched from".
+  PushNotification? launchPush;
+
+  final _refreshes = StreamController<String>.broadcast(sync: true);
+  final _taps = StreamController<PushNotification>.broadcast(sync: true);
+  final _arrivals = StreamController<PushNotification>.broadcast(sync: true);
+
+  void rotateToken(String token) {
+    currentToken = token;
+    _refreshes.add(token);
+  }
+
+  void tap(PushNotification push) => _taps.add(push);
+
+  void arrive(PushNotification push) => _arrivals.add(push);
+
+  @override
+  bool get enabled => true;
+
+  @override
+  Future<String?> token() async => currentToken;
+
+  @override
+  Stream<String> get tokenRefreshes => _refreshes.stream;
+
+  @override
+  Future<PushNotification?> launchedFrom() async => launchPush;
+
+  @override
+  Stream<PushNotification> get taps => _taps.stream;
+
+  @override
+  Stream<PushNotification> get arrivals => _arrivals.stream;
 }

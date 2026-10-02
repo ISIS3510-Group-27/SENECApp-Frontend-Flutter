@@ -6,9 +6,11 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
+import '../../data/api/api_client.dart';
 import '../../data/models/app_notification.dart';
 import '../../data/models/entry_point.dart';
 import '../../state/app_state.dart';
+import '../event_detail/event_detail_screen.dart';
 import '../rso_detail/rso_detail_screen.dart';
 import '../shell/track_screen.dart';
 
@@ -22,12 +24,36 @@ class NotificationsScreen extends StatelessWidget {
   static Route<void> route() =>
       MaterialPageRoute<void>(builder: (_) => const NotificationsScreen());
 
+  /// Same destination as tapping the push: the event if there is one, else
+  /// the group.
   void _open(BuildContext context, AppNotification notification) {
     context.read<AppState>().openNotification(notification);
-    if (notification.groupId case final groupId?) {
-      Navigator.of(context).push(
-        RsoDetailScreen.route(groupId, entryPoint: EntryPoint.notification),
-      );
+    final route = switch (notification) {
+      AppNotification(:final eventId?) => EventDetailScreen.route(
+        eventId,
+        entryPoint: EventEntryPoint.notification,
+      ),
+      AppNotification(:final groupId?) => RsoDetailScreen.route(
+        groupId,
+        entryPoint: EntryPoint.notification,
+      ),
+      _ => null,
+    };
+    if (route != null) Navigator.of(context).push(route);
+  }
+
+  Future<void> _dismiss(
+    BuildContext context,
+    AppNotification notification,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().dismissNotification(notification);
+    } on ApiException catch (e) {
+      if (context.mounted) {
+        reportError(context, e, screen: Screens.notifications);
+      }
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -117,10 +143,27 @@ class NotificationsScreen extends StatelessWidget {
                   separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final notification = notifications[index];
-                    return _NotificationCard(
+                    final card = _NotificationCard(
                       notification: notification,
                       unread: notification.unread,
                       onTap: () => _open(context, notification),
+                    );
+                    if (!notification.unread) return card;
+                    // Swiping clears it without opening it (BQ8). The card
+                    // stays, now read, like "Mark all read" leaves it.
+                    return Dismissible(
+                      key: ValueKey('notification-${notification.id}'),
+                      confirmDismiss: (_) async {
+                        _dismiss(context, notification);
+                        return false;
+                      },
+                      background: const _SwipeHint(
+                        alignment: Alignment.centerLeft,
+                      ),
+                      secondaryBackground: const _SwipeHint(
+                        alignment: Alignment.centerRight,
+                      ),
+                      child: card,
                     );
                   },
                 ),
@@ -271,6 +314,33 @@ class _EmptyInbox extends StatelessWidget {
             style: AppTheme.body(size: 13, color: AppColors.mutedForeground),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Shown under a card while it's being swiped.
+class _SwipeHint extends StatelessWidget {
+  const _SwipeHint({required this.alignment});
+
+  final Alignment alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: alignment,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        color: AppColors.secondary,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Text(
+        'Mark read',
+        style: AppTheme.body(
+          size: 12,
+          weight: FontWeight.w800,
+          color: AppColors.mutedForeground,
+        ),
       ),
     );
   }

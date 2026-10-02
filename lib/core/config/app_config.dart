@@ -41,6 +41,10 @@ abstract final class AppConfig {
   static AuthMode get authMode =>
       _authMode == 'firebase' ? AuthMode.firebase : AuthMode.dev;
 
+  /// Firebase (sign-in and push notifications) only runs once the project is
+  /// configured, which `AUTH_MODE=firebase` stands for.
+  static bool get firebaseEnabled => authMode == AuthMode.firebase;
+
   /// The backend only accepts university accounts. Checked here too so a typo
   /// is caught before a round trip.
   static const allowedEmailDomain = 'uniandes.edu.co';

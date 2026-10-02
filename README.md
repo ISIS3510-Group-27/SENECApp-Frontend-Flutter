@@ -35,6 +35,12 @@ To enable Firebase:
 3. In the backend's `.env`: `AUTH_PROVIDER=firebase` and `FIREBASE_PROJECT_ID=<project id>`.
 4. `flutter run --dart-define=AUTH_MODE=firebase`
 
+## Push notifications
+
+Push (Firebase Cloud Messaging) uses the same Firebase project, so it switches on with `AUTH_MODE=firebase`. Without it, notifications still reach the in-app inbox. To have the backend send pushes, follow "Push notifications" in the backend README (service-account key and `PUSH_PROVIDER=fcm`).
+
+The app registers the phone after sign-in and unregisters it on sign-out. Tapping a push opens its event or group. Android 13+ asks the student for permission first.
+
 ## Tests
 
 ```sh

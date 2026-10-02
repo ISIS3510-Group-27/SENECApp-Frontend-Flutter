@@ -208,6 +208,30 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// The student tapped the push for inbox entry [id]. Recorded as opened
+  /// (BQ8); the inbox is fetched again so the bell and list agree.
+  Future<void> openPushed(int id) async {
+    try {
+      await _notificationsRepo.open(id);
+    } on ApiException {
+      // Still unread in the inbox, where tapping it records the open.
+    }
+    await refreshNotifications();
+  }
+
+  /// The student swiped [notification] away without opening it (BQ8).
+  /// Throws [ApiException] if the backend refuses; the card comes back.
+  Future<void> dismissNotification(AppNotification notification) async {
+    if (!notification.unread) return;
+    _replaceNotification(notification.copyWith(dismissed: true));
+    try {
+      await _notificationsRepo.dismiss(notification.id);
+    } on ApiException {
+      _replaceNotification(notification);
+      rethrow;
+    }
+  }
+
   /// Clears every unread notification without opening it. Recorded as
   /// dismissed, not opened, so BQ8 still sees them as ignored.
   Future<void> markAllRead() async {

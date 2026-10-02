@@ -28,7 +28,10 @@ enum EventEntryPoint {
   events('events'),
 
   /// A group profile's upcoming events.
-  groupDetail('group_detail');
+  groupDetail('group_detail'),
+
+  /// A push or inbox notification.
+  notification('notification');
 
   const EventEntryPoint(this.value);
 

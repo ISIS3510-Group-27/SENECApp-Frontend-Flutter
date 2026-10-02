@@ -390,6 +390,12 @@ class FakeBackend {
     final query = request.url.queryParametersAll;
 
     switch ((request.method, segments)) {
+      case ('POST', ['me', 'devices']):
+        return http.Response('', 204);
+
+      case ('DELETE', ['me', 'devices', _]):
+        return http.Response('', 204);
+
       case ('POST', ['analytics', 'events']):
         final events = (jsonDecode(request.body) as Map)['events'] as List;
         analyticsEvents.addAll(events.cast<Map<String, dynamic>>());

@@ -152,7 +152,7 @@ void main() {
   });
 
   group('Notifications', () {
-    testWidgets('tapping one records the open and shows its group', (
+    testWidgets('tapping one records the open and shows its event', (
       tester,
     ) async {
       await openApp(tester);
@@ -166,13 +166,10 @@ void main() {
         backend.requestsTo('POST', '/me/notifications/1/open'),
         hasLength(1),
       );
+      // About event 1, so it opens the event, as tapping the push does.
       expect(
-        backend
-            .requestsTo('GET', '/groups/1')
-            .single
-            .url
-            .queryParameters['entry_point'],
-        'notification',
+        backend.requestsTo('GET', '/events/1').single.url.queryParameters,
+        {'entry_point': 'notification'},
       );
     });
 

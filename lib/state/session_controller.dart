@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../core/config/app_config.dart';
@@ -6,6 +8,7 @@ import '../data/api/api_client.dart';
 import '../data/auth/auth_service.dart';
 import '../data/models/student_profile.dart';
 import '../data/repositories/me_repository.dart';
+import 'push_registration.dart';
 
 enum SessionStatus {
   /// Restoring the previous session at launch.
@@ -36,15 +39,18 @@ class SessionController extends ChangeNotifier {
     required MeRepository me,
     required ApiClient api,
     Analytics? analytics,
+    PushRegistration? push,
   }) : _auth = auth,
        _me = me,
-       _analytics = analytics {
+       _analytics = analytics,
+       _push = push {
     api.onUnauthorized = _onUnauthorized;
   }
 
   final AuthService _auth;
   final MeRepository _me;
   final Analytics? _analytics;
+  final PushRegistration? _push;
 
   SessionStatus _status = SessionStatus.starting;
   AuthAccount? _account;
@@ -124,6 +130,12 @@ class SessionController extends ChangeNotifier {
     } on Object {
       // Kept for the next flush.
     }
+    // Same for pushes: the next student on this phone mustn't get this one's.
+    try {
+      await _push?.unregister().timeout(const Duration(seconds: 5));
+    } on Object {
+      // The backend drops the token once FCM reports it dead.
+    }
     await _auth.signOut();
     _account = null;
     _student = null;
@@ -144,6 +156,8 @@ class SessionController extends ChangeNotifier {
     try {
       _student = await _me.fetch();
       _setStatus(SessionStatus.signedIn);
+      // In the background: the app doesn't wait for push to be set up.
+      unawaited(_push?.register());
     } on ApiException catch (e) {
       if (e.statusCode == 401 || e.statusCode == 403) {
         // The backend turned the account away (not a university email, not
