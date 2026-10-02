@@ -25,11 +25,16 @@ class RsoDetailScreen extends StatefulWidget {
     super.key,
     required this.rsoId,
     required this.entryPoint,
+    this.recRequestId,
     this.preview,
   });
 
   final int rsoId;
   final EntryPoint entryPoint;
+
+  /// The recommendation list this group was picked from, so the view and a
+  /// join count for it (BQ2). Only with [EntryPoint.recommendation].
+  final String? recRequestId;
 
   /// The list item that was tapped, shown while the full profile loads.
   final Rso? preview;
@@ -39,10 +44,15 @@ class RsoDetailScreen extends StatefulWidget {
   static Route<void> route(
     int rsoId, {
     required EntryPoint entryPoint,
+    String? recRequestId,
     Rso? preview,
   }) => MaterialPageRoute<void>(
-    builder: (_) =>
-        RsoDetailScreen(rsoId: rsoId, entryPoint: entryPoint, preview: preview),
+    builder: (_) => RsoDetailScreen(
+      rsoId: rsoId,
+      entryPoint: entryPoint,
+      recRequestId: recRequestId,
+      preview: preview,
+    ),
   );
 
   @override
@@ -65,6 +75,7 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
       final detail = await context.read<AppServices>().groups.detail(
         widget.rsoId,
         entryPoint: widget.entryPoint,
+        recRequestId: widget.recRequestId,
       );
       if (mounted) setState(() => _detail = detail);
     } on ApiException catch (e) {
@@ -182,6 +193,7 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
               rso: rso,
               joined: joined,
               entryPoint: widget.entryPoint,
+              recRequestId: widget.recRequestId,
             ),
           ),
         ],
@@ -506,11 +518,13 @@ class _JoinCta extends StatefulWidget {
     required this.rso,
     required this.joined,
     required this.entryPoint,
+    this.recRequestId,
   });
 
   final Rso rso;
   final bool joined;
   final EntryPoint entryPoint;
+  final String? recRequestId;
 
   @override
   State<_JoinCta> createState() => _JoinCtaState();
@@ -526,6 +540,7 @@ class _JoinCtaState extends State<_JoinCta> {
       await context.read<AppState>().join(
         widget.rso,
         entryPoint: widget.entryPoint,
+        recRequestId: widget.recRequestId,
       );
       messenger.showSnackBar(
         SnackBar(content: Text('Welcome to ${widget.rso.name}!')),

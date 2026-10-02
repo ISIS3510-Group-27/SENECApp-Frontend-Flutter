@@ -10,15 +10,28 @@ import 'badges.dart';
 import 'org_image.dart';
 import 'surfaces.dart';
 
-/// One organization in the Discover list.
+/// One organization in a list: Discover's results, or the recommendations.
 ///
 /// The heart is a nested tap target, so it stops the tap from also opening the
 /// detail screen - saving and opening are different intents.
 class RsoListTile extends StatelessWidget {
-  const RsoListTile({super.key, required this.rso, required this.onTap});
+  const RsoListTile({
+    super.key,
+    required this.rso,
+    required this.onTap,
+    this.saveSource = 'explore',
+    this.reasons = const [],
+  });
 
   final Rso rso;
   final VoidCallback onTap;
+
+  /// The screen a save is recorded from. Saves from Explore are the ones
+  /// BQ13 counts.
+  final String saveSource;
+
+  /// Why the recommender picked this group, listed under its name.
+  final List<String> reasons;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +78,10 @@ class RsoListTile extends StatelessWidget {
                     color: AppColors.mutedForeground,
                   ),
                 ),
+                for (final reason in reasons) ...[
+                  const SizedBox(height: 6),
+                  RecommendationReason(text: reason, maxLines: 2),
+                ],
                 if (rso.nextEvent case final nextEvent?) ...[
                   const SizedBox(height: 6),
                   Align(
@@ -76,7 +93,7 @@ class RsoListTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          _LikeButton(rso: rso, liked: liked),
+          _LikeButton(rso: rso, liked: liked, source: saveSource),
         ],
       ),
     );
@@ -84,16 +101,20 @@ class RsoListTile extends StatelessWidget {
 }
 
 class _LikeButton extends StatelessWidget {
-  const _LikeButton({required this.rso, required this.liked});
+  const _LikeButton({
+    required this.rso,
+    required this.liked,
+    required this.source,
+  });
 
   final Rso rso;
   final bool liked;
+  final String source;
 
-  /// Saves from the list count as saves from Explore (BQ13).
   Future<void> _toggle(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await context.read<AppState>().toggleSave(rso, source: 'explore');
+      await context.read<AppState>().toggleSave(rso, source: source);
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }

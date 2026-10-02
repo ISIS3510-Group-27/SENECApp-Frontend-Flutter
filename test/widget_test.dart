@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:senecapp/core/assets/asset_catalog.dart';
+import 'package:senecapp/core/widgets/rso_list_tile.dart';
 import 'package:senecapp/features/create_rso/create_rso_screen.dart';
 import 'package:senecapp/features/discover/discover_screen.dart';
 
@@ -55,7 +56,7 @@ void main() {
     await pumpSignedIn(tester);
 
     // Viajeros Uniandes is not one of the seeded memberships.
-    await tester.tap(find.text('Viajeros Uniandes'));
+    await tester.tap(find.widgetWithText(RsoListTile, 'Viajeros Uniandes'));
     await tester.pumpAndSettle();
 
     expect(find.text('Join RSO'), findsOneWidget);

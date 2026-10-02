@@ -109,3 +109,50 @@ class NextEventPill extends StatelessWidget {
     );
   }
 }
+
+/// One line of "why we recommend this", marked with the recommender's sparkle.
+class RecommendationReason extends StatelessWidget {
+  const RecommendationReason({
+    super.key,
+    required this.text,
+    this.maxLines = 1,
+    this.color = AppColors.bodyForeground,
+  });
+
+  final String text;
+  final int maxLines;
+
+  /// The text colour; the sparkle stays gold. Lighter over photos.
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 1),
+          child: Icon(
+            Icons.auto_awesome_rounded,
+            size: 12,
+            color: AppColors.accent,
+          ),
+        ),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: maxLines,
+            overflow: TextOverflow.ellipsis,
+            style: AppTheme.body(
+              size: 11,
+              weight: FontWeight.w700,
+              color: color,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

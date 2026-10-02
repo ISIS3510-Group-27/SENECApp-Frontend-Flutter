@@ -79,10 +79,19 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Joins [rso]. [entryPoint] is how the student reached its profile.
+  /// Joins [rso]. [entryPoint] is how the student reached its profile, and
+  /// [recRequestId] the recommendation list it came from, if any.
   /// Throws [ApiException] if the backend refuses.
-  Future<void> join(Rso rso, {required EntryPoint entryPoint}) async {
-    await _groups.join(rso.id, entryPoint: entryPoint);
+  Future<void> join(
+    Rso rso, {
+    required EntryPoint entryPoint,
+    String? recRequestId,
+  }) async {
+    await _groups.join(
+      rso.id,
+      entryPoint: entryPoint,
+      recRequestId: recRequestId,
+    );
     _memberIds.add(rso.id);
     _membershipVersion++;
     notifyListeners();

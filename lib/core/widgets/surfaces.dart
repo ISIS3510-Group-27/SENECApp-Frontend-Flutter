@@ -65,7 +65,15 @@ class SectionLabel extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(text.toUpperCase(), style: AppTheme.sectionLabel),
+        // Gives way to the trailing action on narrow screens.
+        Flexible(
+          child: Text(
+            text.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTheme.sectionLabel,
+          ),
+        ),
         ?trailing,
       ],
     );

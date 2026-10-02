@@ -16,11 +16,13 @@ import '../../core/widgets/surfaces.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/group_filters.dart';
+import '../../data/models/recommendation.dart';
 import '../../data/models/rso.dart';
 import '../../data/models/rso_category.dart';
 import '../../data/repositories/groups_repository.dart';
 import '../../state/app_state.dart';
 import '../notifications/notifications_screen.dart';
+import '../recommendations/recommendations_screen.dart';
 import '../rso_detail/rso_detail_screen.dart';
 import 'filters_sheet.dart';
 
@@ -29,6 +31,10 @@ import 'filters_sheet.dart';
 /// Search and filters run on the backend, which logs each search it receives
 /// (BQ5, BQ12). Typing is debounced so a word is one search, not one per
 /// letter.
+///
+/// Above the results, the recommender's picks for the student (the smart
+/// feature). They are fetched once per visit, since the backend logs each
+/// answer as shown (BQ2).
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key, required this.onCreateRso});
 
@@ -48,7 +54,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   GroupFilters _filters = const GroupFilters();
   GroupPage? _results;
+
+  /// Most popular groups, shown when recommendations can't be.
   List<Rso> _featured = const [];
+
+  GroupRecommendations? _recommendations;
+  bool _recommendationsFailed = false;
   String? _error;
   bool _loading = false;
 
@@ -64,6 +75,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   void initState() {
     super.initState();
     _search();
+    _loadRecommendations();
   }
 
   @override
@@ -73,8 +85,25 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     super.dispose();
   }
 
-  /// The carousel is a browsing aid, so it only shows when the user isn't actively searching or filtering
-  bool get _showFeatured => !_filters.isSearch && _featured.isNotEmpty;
+  Future<void> _loadRecommendations() async {
+    try {
+      final recommendations = await context
+          .read<AppServices>()
+          .recommendations
+          .groups();
+      if (!mounted) return;
+      setState(() {
+        _recommendations = recommendations;
+        _recommendationsFailed = false;
+      });
+    } on ApiException {
+      // Popular groups take the carousel's place.
+      if (mounted) setState(() => _recommendationsFailed = true);
+    }
+  }
+
+  /// Pull to refresh asks for new recommendations too.
+  Future<void> _refresh() => Future.wait([_search(), _loadRecommendations()]);
 
   Future<void> _search() async {
     _debounce?.cancel();
@@ -125,6 +154,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   /// Groups opened from narrowed results were found by searching; the rest by
   /// browsing. The backend compares the two (BQ6, BQ12, BQ13).
+  void _openRecommendation(GroupRecommendation item) {
+    Navigator.of(context).push(
+      RsoDetailScreen.route(
+        item.group.id,
+        entryPoint: EntryPoint.recommendation,
+        recRequestId: _recommendations!.requestId,
+        preview: item.group,
+      ),
+    );
+  }
+
   void _openRso(Rso rso, {bool fromFeatured = false}) {
     final entryPoint = !fromFeatured && _filters.isSearch
         ? EntryPoint.search
@@ -137,9 +177,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final results = _results;
+    final state = context.watch<AppState>();
+    // Groups joined since the list was fetched stop being suggestions.
+    final recommended = [
+      for (final item
+          in _recommendations?.items ?? const <GroupRecommendation>[])
+        if (!state.isMember(item.group)) item,
+    ];
+    // The carousels are a browsing aid, so they only show when the student
+    // isn't actively searching or filtering.
+    final browsing = !_filters.isSearch;
 
     return RefreshIndicator(
-      onRefresh: _search,
+      onRefresh: _refresh,
       color: AppColors.accent,
       child: ListView(
         padding: const EdgeInsets.only(bottom: kNavBarClearance),
@@ -173,7 +223,33 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               ],
             ),
           ),
-          if (_showFeatured) ...[
+          if (browsing && recommended.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
+              child: SectionLabel(
+                text: 'Recommended for you',
+                trailing: _SeeAllButton(
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).push(RecommendationsScreen.route(_recommendations!)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _FeaturedCarousel(
+              rsos: [for (final item in recommended.take(5)) item.group],
+              reasons: [
+                for (final item in recommended.take(5))
+                  item.reasons.firstOrNull,
+              ],
+              onSelect: (index) => _openRecommendation(recommended[index]),
+            ),
+            // Popular groups instead, once recommendations failed or ran out
+            // (the student joined them all).
+          ] else if (browsing &&
+              (_recommendationsFailed || _recommendations != null) &&
+              _featured.isNotEmpty) ...[
             const SizedBox(height: 20),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: kPageGutter),
@@ -182,7 +258,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             const SizedBox(height: 12),
             _FeaturedCarousel(
               rsos: _featured,
-              onSelect: (rso) => _openRso(rso, fromFeatured: true),
+              onSelect: (index) =>
+                  _openRso(_featured[index], fromFeatured: true),
             ),
           ],
           const SizedBox(height: 20),
@@ -344,10 +421,19 @@ class _SearchField extends StatelessWidget {
 }
 
 class _FeaturedCarousel extends StatelessWidget {
-  const _FeaturedCarousel({required this.rsos, required this.onSelect});
+  const _FeaturedCarousel({
+    required this.rsos,
+    required this.onSelect,
+    this.reasons,
+  });
 
   final List<Rso> rsos;
-  final ValueChanged<Rso> onSelect;
+
+  /// Called with the tapped card's index.
+  final ValueChanged<int> onSelect;
+
+  /// One line per card on why it was recommended, in the order of [rsos].
+  final List<String?>? reasons;
 
   @override
   Widget build(BuildContext context) {
@@ -358,18 +444,24 @@ class _FeaturedCarousel extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
         itemCount: rsos.length,
         separatorBuilder: (_, _) => const SizedBox(width: 12),
-        itemBuilder: (context, index) =>
-            _FeaturedCard(rso: rsos[index], onTap: () => onSelect(rsos[index])),
+        itemBuilder: (context, index) => _FeaturedCard(
+          rso: rsos[index],
+          reason: reasons?[index],
+          onTap: () => onSelect(index),
+        ),
       ),
     );
   }
 }
 
 class _FeaturedCard extends StatelessWidget {
-  const _FeaturedCard({required this.rso, required this.onTap});
+  const _FeaturedCard({required this.rso, required this.onTap, this.reason});
 
   final Rso rso;
   final VoidCallback onTap;
+
+  /// Why it was recommended; takes the category line's place.
+  final String? reason;
 
   @override
   Widget build(BuildContext context) {
@@ -408,15 +500,24 @@ class _FeaturedCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      rso.category.label.toUpperCase(),
-                      style: AppTheme.body(
-                        size: 11,
-                        weight: FontWeight.w700,
-                        color: AppColors.accent.withValues(alpha: 0.85),
-                        letterSpacing: 1.2,
+                    if (reason case final reason?)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: RecommendationReason(
+                          text: reason,
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                      )
+                    else
+                      Text(
+                        rso.category.label.toUpperCase(),
+                        style: AppTheme.body(
+                          size: 11,
+                          weight: FontWeight.w700,
+                          color: AppColors.accent.withValues(alpha: 0.85),
+                          letterSpacing: 1.2,
+                        ),
                       ),
-                    ),
                     Text(
                       rso.name,
                       maxLines: 2,
@@ -541,6 +642,31 @@ class _EmptyResults extends StatelessWidget {
             style: AppTheme.body(size: 13, color: AppColors.mutedForeground),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SeeAllButton extends StatelessWidget {
+  const _SeeAllButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(AppRadius.chip),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Text(
+          'See all',
+          style: AppTheme.body(
+            size: 12,
+            weight: FontWeight.w800,
+            color: AppColors.accent,
+          ),
+        ),
       ),
     );
   }

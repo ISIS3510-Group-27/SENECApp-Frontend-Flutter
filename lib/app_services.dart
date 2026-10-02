@@ -12,6 +12,7 @@ import 'data/repositories/events_repository.dart';
 import 'data/repositories/groups_repository.dart';
 import 'data/repositories/me_repository.dart';
 import 'data/repositories/notifications_repository.dart';
+import 'data/repositories/recommendations_repository.dart';
 
 /// The long-lived objects that talk to the outside world, built once at launch.
 ///
@@ -22,7 +23,8 @@ class AppServices {
       groups = GroupsRepository(api),
       events = EventsRepository(api),
       notifications = NotificationsRepository(api),
-      catalog = CatalogRepository(api);
+      catalog = CatalogRepository(api),
+      recommendations = RecommendationsRepository(api);
 
   final AuthService auth;
   final ApiClient api;
@@ -31,6 +33,7 @@ class AppServices {
   final EventsRepository events;
   final NotificationsRepository notifications;
   final CatalogRepository catalog;
+  final RecommendationsRepository recommendations;
 
   static Future<AppServices> create() async {
     final AuthService auth;

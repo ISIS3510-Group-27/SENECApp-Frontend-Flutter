@@ -49,7 +49,7 @@ void main() {
     ) async {
       await openApp(tester);
 
-      await tester.tap(find.text('Viajeros Uniandes').first);
+      await tester.tap(find.widgetWithText(RsoListTile, 'Viajeros Uniandes'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Join RSO'));
       await tester.pumpAndSettle();

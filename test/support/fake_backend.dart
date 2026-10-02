@@ -30,6 +30,20 @@ class FakeBackend {
   /// When true, every request fails as if the server were unreachable.
   bool offline = false;
 
+  /// When true, only the recommender fails (500).
+  bool recommenderDown = false;
+
+  /// The `request_id` of every recommendation list served.
+  static const recRequestId = '0f8c2a7e-3b1d-4c5e-9a6f-2d4b8e1c7a90';
+
+  /// What the recommender suggests, best first: the student's non-member
+  /// groups with the reasons the real one would give.
+  static const _recommended = [
+    (3, ['Matches your interests: Travel', 'Popular on campus']),
+    (6, ['Verified group']),
+    (8, ['Its events fit your free time']),
+  ];
+
   late final MockClient client = MockClient(_handle);
 
   /// Requests with [method] whose path ends with [path] (`/groups`,
@@ -388,6 +402,20 @@ class FakeBackend {
         notification[action == 'open' ? 'opened_at' : 'dismissed_at'] = _now
             .toIso8601String();
         return jsonResponse(notification);
+
+      case ('GET', ['recommendations', 'groups']):
+        if (recommenderDown) {
+          return jsonResponse({'detail': 'Internal Server Error'}, 500);
+        }
+        return jsonResponse({
+          'request_id': recRequestId,
+          'model_version': 'test-v1',
+          'items': [
+            for (final (id, reasons) in _recommended)
+              if (!memberIds.contains(id))
+                {'group': _groupJson(id), 'score': 0.8, 'reasons': reasons},
+          ],
+        });
 
       case ('GET', ['interests']):
         return jsonResponse([
