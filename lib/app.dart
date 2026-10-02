@@ -60,7 +60,15 @@ class _SessionGate extends StatelessWidget {
       SessionStatus.signedIn => ChangeNotifierProvider(
         // A different student gets a fresh state, never the previous one's.
         key: ValueKey(session.student!.id),
-        create: (_) => AppState(student: session.student!),
+        create: (context) {
+          final services = context.read<AppServices>();
+          return AppState(
+            student: session.student!,
+            groups: services.groups,
+            events: services.events,
+            notifications: services.notifications,
+          )..load();
+        },
         child: const HomeShell(),
       ),
     };

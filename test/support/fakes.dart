@@ -10,6 +10,10 @@ import 'package:senecapp/data/api/api_client.dart';
 import 'package:senecapp/data/api/client_context.dart';
 import 'package:senecapp/data/auth/auth_service.dart';
 
+import 'fake_backend.dart';
+
+export 'fake_backend.dart';
+
 /// An [AuthService] that keeps everything in memory.
 class FakeAuthService implements AuthService {
   FakeAuthService({
@@ -113,13 +117,11 @@ http.Response jsonResponse(Object? body, [int status = 200]) => http.Response(
   headers: {'content-type': 'application/json; charset=utf-8'},
 );
 
-/// A fake backend that answers `GET /me` with [me] and everything else 404.
+/// A [FakeBackend] whose `GET /me` answers [me] with [meStatus].
 MockClient fakeBackend({Object me = sofiaJson, int meStatus = 200}) =>
-    MockClient((request) async {
-      if (request.url.path.endsWith('/me')) return jsonResponse(me, meStatus);
-      return jsonResponse({'detail': 'Not Found'}, 404);
-    });
+    FakeBackend(me: me, meStatus: meStatus).client;
 
+/// Services wired to [backend], a [FakeBackend] unless given.
 AppServices testServices({FakeAuthService? auth, http.Client? backend}) {
   final fakeAuth = auth ?? FakeAuthService();
   return AppServices(

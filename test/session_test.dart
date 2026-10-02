@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:senecapp/data/auth/dev_auth_service.dart';
 import 'package:senecapp/features/auth/session_status_screens.dart';
@@ -22,20 +21,21 @@ void main() {
   });
 
   testWidgets('signing in loads the profile from the backend', (tester) async {
-    final requests = <http.Request>[];
-    final backend = MockClient((request) async {
-      requests.add(request);
-      return jsonResponse(sofiaJson);
-    });
-    await pumpApp(tester, testServices(backend: backend));
+    final backend = FakeBackend();
+    await pumpApp(tester, testServices(backend: backend.client));
 
     await tester.enterText(find.byType(TextField), 's.arango@uniandes.edu.co');
     await tester.tap(find.text('Sign in'));
     await tester.pumpAndSettle();
 
     expect(find.text('SENECApp'), findsOneWidget);
-    expect(requests.single.url.path, '/api/v1/me');
-    expect(requests.single.headers['Authorization'], 'Bearer test-token');
+    // The profile comes first; the app's lists only load once there is one.
+    expect(backend.requests.first.url.path, '/api/v1/me');
+    expect(backend.requestsTo('GET', '/me'), hasLength(1));
+    expect(
+      backend.requests.first.headers['Authorization'],
+      'Bearer test-token',
+    );
 
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
@@ -113,17 +113,15 @@ void main() {
   });
 
   testWidgets('a backend outage can be retried', (tester) async {
-    var up = false;
-    final backend = MockClient(
-      (_) async => up
-          ? jsonResponse(sofiaJson)
-          : throw http.ClientException('Connection refused'),
+    final backend = FakeBackend()..offline = true;
+    await pumpApp(
+      tester,
+      testServices(auth: signedInAuth(), backend: backend.client),
     );
-    await pumpApp(tester, testServices(auth: signedInAuth(), backend: backend));
 
     expect(find.byType(ProfileLoadFailedScreen), findsOneWidget);
 
-    up = true;
+    backend.offline = false;
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
 

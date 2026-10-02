@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import '../../core/assets/asset_catalog.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/async_states.dart';
 import '../../core/widgets/org_image.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/models/entry_point.dart';
 import '../../data/models/rso.dart';
 import '../../state/app_state.dart';
 import '../rso_detail/rso_detail_screen.dart';
@@ -17,73 +19,87 @@ class MyRsosScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final joined = state.joinedRsos;
+    final joined = state.myGroups;
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: kNavBarClearance),
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(kPageGutter, 8, kPageGutter, 0),
-          child: _Header(
-            overline: 'MY ORGANIZATIONS',
-            title: 'My RSOs',
-            mascot: BrandAssets.mascot67,
-          ),
-        ),
-        const SizedBox(height: 20),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
-          child: Row(
-            spacing: 12,
-            children: [
-              Expanded(
-                child: StatTile(
-                  value: '${state.joinedCount}',
-                  label: 'Joined',
-                  color: AppColors.primary,
-                ),
-              ),
-              Expanded(
-                child: StatTile(
-                  value: '${state.eventsAttended}',
-                  label: 'Events attended',
-                  color: AppColors.accent,
-                ),
-              ),
-              Expanded(
-                child: StatTile(
-                  value: state.currentTerm,
-                  label: 'This semester',
-                  color: AppColors.teal,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: kPageGutter),
-          child: SectionLabel(text: 'Active Memberships'),
-        ),
-        const SizedBox(height: 12),
-        if (joined.isEmpty)
-          const _NoMemberships()
-        else
-          for (final rso in joined)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                kPageGutter,
-                0,
-                kPageGutter,
-                12,
-              ),
-              child: _MembershipCard(
-                rso: rso,
-                onTap: () =>
-                    Navigator.of(context).push(RsoDetailScreen.route(rso.id)),
-              ),
+    return RefreshIndicator(
+      onRefresh: () =>
+          Future.wait([state.refreshMemberships(), state.refreshAttendance()]),
+      color: AppColors.accent,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: kNavBarClearance),
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(kPageGutter, 8, kPageGutter, 0),
+            child: _Header(
+              overline: 'MY ORGANIZATIONS',
+              title: 'My RSOs',
+              mascot: BrandAssets.mascot67,
             ),
-      ],
+          ),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
+            child: Row(
+              spacing: 12,
+              children: [
+                Expanded(
+                  child: StatTile(
+                    value: '${state.joinedCount}',
+                    label: 'Joined',
+                    color: AppColors.primary,
+                  ),
+                ),
+                Expanded(
+                  child: StatTile(
+                    value: '${state.eventsAttended ?? '–'}',
+                    label: 'Events attended',
+                    color: AppColors.accent,
+                  ),
+                ),
+                Expanded(
+                  child: StatTile(
+                    value: state.currentTerm,
+                    label: 'This semester',
+                    color: AppColors.teal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: kPageGutter),
+            child: SectionLabel(text: 'Active Memberships'),
+          ),
+          const SizedBox(height: 12),
+          if (state.myGroupsError case final error? when joined == null)
+            ErrorBlock(message: error, onRetry: state.refreshMemberships)
+          else if (joined == null)
+            const LoadingBlock()
+          else if (joined.isEmpty)
+            const _NoMemberships()
+          else
+            for (final rso in joined)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  kPageGutter,
+                  0,
+                  kPageGutter,
+                  12,
+                ),
+                child: _MembershipCard(
+                  rso: rso,
+                  onTap: () => Navigator.of(context).push(
+                    RsoDetailScreen.route(
+                      rso.id,
+                      entryPoint: EntryPoint.direct,
+                      preview: rso,
+                    ),
+                  ),
+                ),
+              ),
+        ],
+      ),
     );
   }
 }

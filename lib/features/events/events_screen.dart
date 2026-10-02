@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../app_services.dart';
+import '../../core/format/dates.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/async_states.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
-import '../../data/repositories/rso_repository.dart';
+import '../../data/models/entry_point.dart';
 import '../../state/app_state.dart';
 import '../rso_detail/rso_detail_screen.dart';
 
 /// Every upcoming event, filterable down to the student's own
 ///  organizations.
 class EventsScreen extends StatefulWidget {
-  const EventsScreen({super.key});
+  const EventsScreen({super.key, this.clock = DateTime.now});
+
+  /// For the "this week" banner.
+  final DateTime Function() clock;
 
   @override
   State<EventsScreen> createState() => _EventsScreenState();
@@ -22,77 +29,137 @@ class EventsScreen extends StatefulWidget {
 class _EventsScreenState extends State<EventsScreen> {
   bool _joinedOnly = false;
 
+  /// Each list is fetched the first time it is shown, then kept.
+  final Map<bool, List<CampusEvent>> _events = {};
+  final Map<bool, String> _errors = {};
+
+  late final AppState _appState = context.read<AppState>();
+  late int _membershipVersion = _appState.membershipVersion;
+
+  @override
+  void initState() {
+    super.initState();
+    _load(joinedOnly: false);
+    _appState.addListener(_onAppStateChanged);
+  }
+
+  @override
+  void dispose() {
+    _appState.removeListener(_onAppStateChanged);
+    super.dispose();
+  }
+
+  /// A group joined anywhere in the app adds its events to "My RSOs".
+  void _onAppStateChanged() {
+    if (_appState.membershipVersion == _membershipVersion) return;
+    _membershipVersion = _appState.membershipVersion;
+    _events.remove(true);
+    if (_joinedOnly) _load(joinedOnly: true);
+  }
+
+  Future<void> _load({required bool joinedOnly}) async {
+    setState(() => _errors.remove(joinedOnly));
+    try {
+      final events = await context.read<AppServices>().events.list(
+        mine: joinedOnly,
+      );
+      if (mounted) setState(() => _events[joinedOnly] = events);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _errors[joinedOnly] = e.message);
+    }
+  }
+
+  void _select({required bool joinedOnly}) {
+    setState(() => _joinedOnly = joinedOnly);
+    if (!_events.containsKey(joinedOnly)) _load(joinedOnly: joinedOnly);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<AppState>();
-    final events = state.events(joinedOnly: _joinedOnly);
-    final weekCount = state.events(joinedOnly: false).length;
+    final events = _events[_joinedOnly];
+    final error = _errors[_joinedOnly];
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: kNavBarClearance),
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(kPageGutter, 8, kPageGutter, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'UPCOMING',
-                style: AppTheme.body(
-                  size: 11,
-                  weight: FontWeight.w700,
-                  color: AppColors.mutedForeground,
-                  letterSpacing: 1.8,
+    return RefreshIndicator(
+      onRefresh: () => _load(joinedOnly: _joinedOnly),
+      color: AppColors.accent,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: kNavBarClearance),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(kPageGutter, 8, kPageGutter, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'UPCOMING',
+                  style: AppTheme.body(
+                    size: 11,
+                    weight: FontWeight.w700,
+                    color: AppColors.mutedForeground,
+                    letterSpacing: 1.8,
+                  ),
+                ),
+                Text('SENECApp Events', style: AppTheme.heading(size: 24)),
+              ],
+            ),
+          ),
+          if (_events[false] case final all?) ...[
+            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
+              child: _WeekBanner(events: all, now: widget.clock()),
+            ),
+          ],
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
+            child: Row(
+              spacing: 8,
+              children: [
+                SelectableChip.filter(
+                  label: 'All Events',
+                  selected: !_joinedOnly,
+                  onSelected: (_) => _select(joinedOnly: false),
+                ),
+                SelectableChip.filter(
+                  label: 'My RSOs',
+                  selected: _joinedOnly,
+                  onSelected: (_) => _select(joinedOnly: true),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (error != null)
+            ErrorBlock(
+              message: error,
+              onRetry: () => _load(joinedOnly: _joinedOnly),
+            )
+          else if (events == null)
+            const LoadingBlock()
+          else if (events.isEmpty)
+            const _NoJoinedEvents()
+          else
+            for (final event in events)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  kPageGutter,
+                  0,
+                  kPageGutter,
+                  12,
+                ),
+                child: _EventCard(
+                  event: event,
+                  onTap: () => Navigator.of(context).push(
+                    RsoDetailScreen.route(
+                      event.rsoId,
+                      entryPoint: EntryPoint.event,
+                    ),
+                  ),
                 ),
               ),
-              Text('SENECApp Events', style: AppTheme.heading(size: 24)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
-          child: _WeekBanner(count: weekCount),
-        ),
-        const SizedBox(height: 20),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
-          child: Row(
-            spacing: 8,
-            children: [
-              SelectableChip.filter(
-                label: 'All Events',
-                selected: !_joinedOnly,
-                onSelected: (_) => setState(() => _joinedOnly = false),
-              ),
-              SelectableChip.filter(
-                label: 'My RSOs',
-                selected: _joinedOnly,
-                onSelected: (_) => setState(() => _joinedOnly = true),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        if (events.isEmpty)
-          const _NoJoinedEvents()
-        else
-          for (final event in events)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                kPageGutter,
-                0,
-                kPageGutter,
-                12,
-              ),
-              child: _EventCard(
-                event: event,
-                onTap: () => Navigator.of(
-                  context,
-                ).push(RsoDetailScreen.route(event.rsoId)),
-              ),
-            ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -100,12 +167,16 @@ class _EventsScreenState extends State<EventsScreen> {
 /// The week-at-a-glance hero. Its more of a banner than a card due to the
 /// colors merged.
 class _WeekBanner extends StatelessWidget {
-  const _WeekBanner({required this.count});
+  const _WeekBanner({required this.events, required this.now});
 
-  final int count;
+  final List<CampusEvent> events;
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
+    final weekEnd = DateTime(now.year, now.month, now.day + 7);
+    final count = events.where((e) => e.startsAt.isBefore(weekEnd)).length;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.hero),
       child: Container(
@@ -156,7 +227,7 @@ class _WeekBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  RsoRepository.eventsWeekRange,
+                  Dates.range(now, weekEnd.subtract(const Duration(days: 1))),
                   style: AppTheme.body(
                     size: 12,
                     color: Colors.white.withValues(alpha: 0.8),
@@ -214,6 +285,13 @@ class _EventCard extends StatelessWidget {
                   icon: Icons.location_on_outlined,
                   text: event.location,
                 ),
+                if (event.isCancelled) ...[
+                  const SizedBox(height: 3),
+                  const _MetaLine(
+                    icon: Icons.event_busy_rounded,
+                    text: 'Cancelled',
+                  ),
+                ],
               ],
             ),
           ),

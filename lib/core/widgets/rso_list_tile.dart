@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/api/api_client.dart';
 import '../../data/models/rso.dart';
 import '../../state/app_state.dart';
 import '../theme/app_colors.dart';
@@ -12,7 +13,7 @@ import 'surfaces.dart';
 /// One organization in the Discover list.
 ///
 /// The heart is a nested tap target, so it stops the tap from also opening the
-/// detail screen - liking and opening are different intents.
+/// detail screen - saving and opening are different intents.
 class RsoListTile extends StatelessWidget {
   const RsoListTile({super.key, required this.rso, required this.onTap});
 
@@ -21,7 +22,7 @@ class RsoListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final liked = context.select<AppState, bool>((s) => s.hasLiked(rso.id));
+    final liked = context.select<AppState, bool>((s) => s.isSaved(rso));
 
     return AppCard(
       onTap: onTap,
@@ -88,6 +89,16 @@ class _LikeButton extends StatelessWidget {
   final Rso rso;
   final bool liked;
 
+  /// Saves from the list count as saves from Explore (BQ13).
+  Future<void> _toggle(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().toggleSave(rso, source: 'explore');
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
@@ -98,7 +109,7 @@ class _LikeButton extends StatelessWidget {
         shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
-          onTap: () => context.read<AppState>().toggleLike(rso.id),
+          onTap: () => _toggle(context),
           child: SizedBox(
             width: 34,
             height: 34,

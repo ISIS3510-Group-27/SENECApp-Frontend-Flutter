@@ -126,7 +126,9 @@ class _IdentityCard extends StatelessWidget {
 
   final StudentProfile student;
   final int joinedCount;
-  final int eventsAttended;
+
+  /// Null until known.
+  final int? eventsAttended;
 
   @override
   Widget build(BuildContext context) {
@@ -224,7 +226,7 @@ class _IdentityCard extends StatelessWidget {
             Row(
               children: [
                 _MiniStat(value: '$joinedCount', label: 'RSOs'),
-                _MiniStat(value: '$eventsAttended', label: 'Events'),
+                _MiniStat(value: '${eventsAttended ?? '–'}', label: 'Events'),
                 _MiniStat(
                   value: student.semester?.toString() ?? '–',
                   label: 'Semester',

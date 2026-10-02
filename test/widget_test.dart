@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:senecapp/core/assets/asset_catalog.dart';
 import 'package:senecapp/features/create_rso/create_rso_screen.dart';
+import 'package:senecapp/features/discover/discover_screen.dart';
 
 import 'support/fakes.dart';
 
@@ -42,6 +43,8 @@ void main() {
     await pumpSignedIn(tester);
 
     await tester.enterText(find.byType(TextField).first, 'business');
+    // The search goes out once typing pauses.
+    await tester.pump(DiscoverScreen.searchDebounce);
     await tester.pumpAndSettle();
 
     // Emprendedores Uniandes and Finance Society are both Business.

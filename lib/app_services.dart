@@ -7,17 +7,30 @@ import 'data/api/client_context.dart';
 import 'data/auth/auth_service.dart';
 import 'data/auth/dev_auth_service.dart';
 import 'data/auth/firebase_auth_service.dart';
+import 'data/repositories/catalog_repository.dart';
+import 'data/repositories/events_repository.dart';
+import 'data/repositories/groups_repository.dart';
 import 'data/repositories/me_repository.dart';
+import 'data/repositories/notifications_repository.dart';
 
 /// The long-lived objects that talk to the outside world, built once at launch.
 ///
 /// Tests build their own with fakes instead of calling [create].
 class AppServices {
-  AppServices({required this.auth, required this.api}) : me = MeRepository(api);
+  AppServices({required this.auth, required this.api})
+    : me = MeRepository(api),
+      groups = GroupsRepository(api),
+      events = EventsRepository(api),
+      notifications = NotificationsRepository(api),
+      catalog = CatalogRepository(api);
 
   final AuthService auth;
   final ApiClient api;
   final MeRepository me;
+  final GroupsRepository groups;
+  final EventsRepository events;
+  final NotificationsRepository notifications;
+  final CatalogRepository catalog;
 
   static Future<AppServices> create() async {
     final AuthService auth;

@@ -1,27 +1,43 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../app_services.dart';
 import '../../core/assets/asset_catalog.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/async_states.dart';
 import '../../core/widgets/badges.dart';
 import '../../core/widgets/org_image.dart';
 import '../../core/widgets/rso_list_tile.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/api/api_client.dart';
+import '../../data/models/entry_point.dart';
+import '../../data/models/group_filters.dart';
 import '../../data/models/rso.dart';
 import '../../data/models/rso_category.dart';
+import '../../data/repositories/groups_repository.dart';
 import '../../state/app_state.dart';
 import '../notifications/notifications_screen.dart';
 import '../rso_detail/rso_detail_screen.dart';
+import 'filters_sheet.dart';
 
 /// Landing tab: search, filter, browse, open
+///
+/// Search and filters run on the backend, which logs each search it receives
+/// (BQ5, BQ12). Typing is debounced so a word is one search, not one per
+/// letter.
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key, required this.onCreateRso});
 
   /// Pushing the create form is the shell's job, because the form is a sibling
   /// of this screen in the Discover stack rather than a child of it.
   final VoidCallback onCreateRso;
+
+  /// How long typing has to pause before the search is sent.
+  static const searchDebounce = Duration(milliseconds: 400);
 
   @override
   State<DiscoverScreen> createState() => _DiscoverScreenState();
@@ -30,80 +46,192 @@ class DiscoverScreen extends StatefulWidget {
 class _DiscoverScreenState extends State<DiscoverScreen> {
   final _searchController = TextEditingController();
 
-  RsoCategory _category = RsoCategory.all;
-  String _query = '';
+  GroupFilters _filters = const GroupFilters();
+  GroupPage? _results;
+  List<Rso> _featured = const [];
+  String? _error;
+  bool _loading = false;
+
+  Timer? _debounce;
+
+  /// Only the latest search may update the list: an older, slower response
+  /// arriving last would otherwise overwrite newer results.
+  int _searchId = 0;
+
+  late final GroupsRepository _groups = context.read<AppServices>().groups;
+
+  @override
+  void initState() {
+    super.initState();
+    _search();
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
   /// The carousel is a browsing aid, so it only shows when the user isn't actively searching or filtering
-  bool get _showFeatured => _query.isEmpty && _category == RsoCategory.all;
+  bool get _showFeatured => !_filters.isSearch && _featured.isNotEmpty;
 
-  void _openRso(Rso rso) {
-    Navigator.of(context).push(RsoDetailScreen.route(rso.id));
+  Future<void> _search() async {
+    _debounce?.cancel();
+    final searchId = ++_searchId;
+    final filters = _filters;
+    setState(() => _loading = true);
+    try {
+      final results = await _groups.search(filters);
+      if (!mounted || searchId != _searchId) return;
+      setState(() {
+        _results = results;
+        _error = null;
+        // Featured is the most popular groups: the first page of an unfiltered,
+        // default-sorted browse.
+        if (!filters.isSearch && filters.sort == GroupSort.popular) {
+          _featured = results.items.take(3).toList();
+        }
+      });
+    } on ApiException catch (e) {
+      if (!mounted || searchId != _searchId) return;
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted && searchId == _searchId) setState(() => _loading = false);
+    }
+  }
+
+  void _onQueryChanged(String value) {
+    _filters = _filters.copyWith(query: value);
+    _debounce?.cancel();
+    _debounce = Timer(DiscoverScreen.searchDebounce, _search);
+  }
+
+  void _onCategorySelected(RsoCategory category) {
+    _filters = _filters.copyWith(category: category);
+    _search();
+  }
+
+  Future<void> _openFilters() async {
+    final chosen = await FiltersSheet.show(
+      context,
+      current: _filters,
+      catalog: context.read<AppServices>().catalog,
+    );
+    if (chosen == null || !mounted) return;
+    _filters = chosen;
+    _search();
+  }
+
+  /// Groups opened from narrowed results were found by searching; the rest by
+  /// browsing. The backend compares the two (BQ6, BQ12, BQ13).
+  void _openRso(Rso rso, {bool fromFeatured = false}) {
+    final entryPoint = !fromFeatured && _filters.isSearch
+        ? EntryPoint.search
+        : EntryPoint.explore;
+    Navigator.of(
+      context,
+    ).push(RsoDetailScreen.route(rso.id, entryPoint: entryPoint, preview: rso));
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<AppState>();
-    final results = state.discover(category: _category, query: _query);
+    final results = _results;
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: kNavBarClearance),
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(kPageGutter, 8, kPageGutter, 0),
-          child: _Header(),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(kPageGutter, 20, kPageGutter, 0),
-          child: _SearchField(
-            controller: _searchController,
-            onChanged: (value) => setState(() => _query = value),
-          ),
-        ),
-        if (_showFeatured) ...[
-          const SizedBox(height: 20),
+    return RefreshIndicator(
+      onRefresh: _search,
+      color: AppColors.accent,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: kNavBarClearance),
+        children: [
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: kPageGutter),
-            child: SectionLabel(text: 'Featured'),
+            padding: EdgeInsets.fromLTRB(kPageGutter, 8, kPageGutter, 0),
+            child: _Header(),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(kPageGutter, 20, kPageGutter, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _SearchField(
+                    controller: _searchController,
+                    onChanged: _onQueryChanged,
+                    onSubmitted: (_) => _search(),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                RoundIconButton(
+                  icon: Icons.tune_rounded,
+                  tooltip: 'Filters',
+                  size: 48,
+                  iconSize: 20,
+                  showDot:
+                      _filters.sheetCount > 0 ||
+                      _filters.sort != GroupSort.popular,
+                  onPressed: _openFilters,
+                ),
+              ],
+            ),
+          ),
+          if (_showFeatured) ...[
+            const SizedBox(height: 20),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: kPageGutter),
+              child: SectionLabel(text: 'Featured'),
+            ),
+            const SizedBox(height: 12),
+            _FeaturedCarousel(
+              rsos: _featured,
+              onSelect: (rso) => _openRso(rso, fromFeatured: true),
+            ),
+          ],
+          const SizedBox(height: 20),
+          _CategoryRow(
+            selected: _filters.category,
+            onSelected: _onCategorySelected,
+          ),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
+            child: SectionLabel(
+              text: results == null
+                  ? 'Organizations'
+                  : '${results.total} '
+                        'Organization${results.total == 1 ? '' : 's'}',
+              trailing: _NewRsoButton(onPressed: widget.onCreateRso),
+            ),
           ),
           const SizedBox(height: 12),
-          _FeaturedCarousel(rsos: state.featured, onSelect: _openRso),
-        ],
-        const SizedBox(height: 20),
-        _CategoryRow(
-          selected: _category,
-          onSelected: (category) => setState(() => _category = category),
-        ),
-        const SizedBox(height: 20),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
-          child: SectionLabel(
-            text:
-                '${results.length} '
-                'Organization${results.length == 1 ? '' : 's'}',
-            trailing: _NewRsoButton(onPressed: widget.onCreateRso),
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (results.isEmpty)
-          const _EmptyResults()
-        else
-          for (final rso in results)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                kPageGutter,
-                0,
-                kPageGutter,
-                12,
+          if (_error case final error?)
+            ErrorBlock(message: error, onRetry: _search)
+          else if (results == null)
+            const LoadingBlock()
+          else if (results.items.isEmpty)
+            const _EmptyResults()
+          else ...[
+            // Results stay on screen while a newer search loads.
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(kPageGutter, 0, kPageGutter, 12),
+                child: LinearProgressIndicator(
+                  minHeight: 2,
+                  color: AppColors.accent,
+                  backgroundColor: Colors.transparent,
+                ),
               ),
-              child: RsoListTile(rso: rso, onTap: () => _openRso(rso)),
-            ),
-      ],
+            for (final rso in results.items)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  kPageGutter,
+                  0,
+                  kPageGutter,
+                  12,
+                ),
+                child: RsoListTile(rso: rso, onTap: () => _openRso(rso)),
+              ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -158,16 +286,24 @@ class _Header extends StatelessWidget {
 }
 
 class _SearchField extends StatelessWidget {
-  const _SearchField({required this.controller, required this.onChanged});
+  const _SearchField({
+    required this.controller,
+    required this.onChanged,
+    required this.onSubmitted,
+  });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
+
+  /// The keyboard's search key: search now instead of after the pause.
+  final ValueChanged<String> onSubmitted;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
       onChanged: onChanged,
+      onSubmitted: onSubmitted,
       textInputAction: TextInputAction.search,
       style: AppTheme.body(size: 14),
       decoration: InputDecoration(
@@ -190,6 +326,7 @@ class _SearchField extends StatelessWidget {
                   onPressed: () {
                     controller.clear();
                     onChanged('');
+                    onSubmitted('');
                   },
                 ),
         ),
