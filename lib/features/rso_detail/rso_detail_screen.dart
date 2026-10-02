@@ -149,6 +149,10 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _StatsRow(rso: rso, members: members, detail: detail),
+                    if (!rso.isApproved) ...[
+                      const SizedBox(height: 16),
+                      _ReviewBanner(rso: rso),
+                    ],
                     const SizedBox(height: 20),
                     SectionLabel(text: 'About'),
                     const SizedBox(height: 8),
@@ -197,17 +201,19 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
               ),
             ],
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _JoinCta(
-              rso: rso,
-              joined: joined,
-              entryPoint: widget.entryPoint,
-              recRequestId: widget.recRequestId,
+          // Nobody joins a proposal until Student Affairs approves it.
+          if (rso.isApproved)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _JoinCta(
+                rso: rso,
+                joined: joined,
+                entryPoint: widget.entryPoint,
+                recRequestId: widget.recRequestId,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -611,6 +617,55 @@ class _JoinCtaState extends State<_JoinCta> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A proposal's standing, shown to its creator (no one else can see it).
+class _ReviewBanner extends StatelessWidget {
+  const _ReviewBanner({required this.rso});
+
+  final Rso rso;
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = rso.reviewStatus == ReviewStatus.pending;
+    final color = pending ? AppColors.accent : AppColors.primary;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: pending ? 0.08 : 0.18),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            pending ? Icons.hourglass_top_rounded : Icons.block_rounded,
+            size: 18,
+            color: pending ? AppColors.accent : AppColors.foreground,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              pending
+                  ? 'Pending review. Only you can see this group until '
+                        'Student Affairs approves it.'
+                  : 'Not approved: '
+                        '${rso.rejectionReason ?? 'no reason given'}',
+              style: AppTheme.body(
+                size: 13,
+                height: 1.45,
+                weight: FontWeight.w600,
+                color: pending ? AppColors.accent : AppColors.foreground,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

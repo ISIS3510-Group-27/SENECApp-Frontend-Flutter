@@ -201,12 +201,26 @@ class _MembershipCard extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.background.withValues(alpha: 0.7),
+                      color: switch (rso.reviewStatus) {
+                        ReviewStatus.approved => AppColors.background,
+                        ReviewStatus.pending => AppColors.accent,
+                        ReviewStatus.rejected => AppColors.primary,
+                      }.withValues(alpha: rso.isApproved ? 0.7 : 0.9),
                       borderRadius: BorderRadius.circular(AppRadius.chip),
                     ),
                     child: Text(
-                      'Member',
-                      style: AppTheme.body(size: 10, weight: FontWeight.w800),
+                      switch (rso.reviewStatus) {
+                        ReviewStatus.approved => 'Member',
+                        ReviewStatus.pending => 'Pending review',
+                        ReviewStatus.rejected => 'Not approved',
+                      },
+                      style: AppTheme.body(
+                        size: 10,
+                        weight: FontWeight.w800,
+                        color: rso.reviewStatus == ReviewStatus.pending
+                            ? AppColors.background
+                            : AppColors.foreground,
+                      ),
                     ),
                   ),
                 ),
@@ -230,7 +244,14 @@ class _MembershipCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${rso.members} members',
+                        switch (rso.reviewStatus) {
+                          ReviewStatus.approved => '${rso.members} members',
+                          ReviewStatus.pending => 'Waiting for Student Affairs',
+                          ReviewStatus.rejected =>
+                            rso.rejectionReason ?? 'Not approved',
+                        },
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTheme.body(
                           size: 12,
                           color: AppColors.mutedForeground,

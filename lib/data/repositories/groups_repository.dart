@@ -70,6 +70,30 @@ class GroupsRepository {
     },
   );
 
+  /// Proposes a new group. It starts pending: only the student sees it, as
+  /// its admin, until Student Affairs approves it. Without [tagIds] the
+  /// backend picks tags from the name and description.
+  /// Throws [ApiException] (409 when the name is taken).
+  Future<Rso> create({
+    required String name,
+    required String categorySlug,
+    required String description,
+    String? contactEmail,
+    Set<int> tagIds = const {},
+  }) async => Rso.fromJson(
+    await _api.post(
+          '/groups',
+          body: {
+            'name': name,
+            'category': categorySlug,
+            'description': description,
+            'contact_email': ?contactEmail,
+            if (tagIds.isNotEmpty) 'tag_ids': tagIds.toList()..sort(),
+          },
+        )
+        as Map<String, dynamic>,
+  );
+
   /// Groups the student is an active member of, most recently joined first.
   Future<List<Rso>> mine() async => _list(await _api.get('/me/groups'));
 

@@ -4,13 +4,20 @@ import 'package:flutter/foundation.dart';
 /// with interests, and Explore can filter by them.
 @immutable
 class Interest {
-  const Interest({required this.id, required this.name});
+  const Interest({required this.id, required this.name, this.categorySlug});
 
-  factory Interest.fromJson(Map<String, dynamic> json) =>
-      Interest(id: json['id'] as int, name: json['name'] as String);
+  factory Interest.fromJson(Map<String, dynamic> json) => Interest(
+    id: json['id'] as int,
+    name: json['name'] as String,
+    categorySlug:
+        (json['category'] as Map<String, dynamic>?)?['slug'] as String?,
+  );
 
   final int id;
   final String name;
+
+  /// The category it belongs to, e.g. `sports` for Tennis.
+  final String? categorySlug;
 }
 
 /// A campus building where groups meet and events happen.

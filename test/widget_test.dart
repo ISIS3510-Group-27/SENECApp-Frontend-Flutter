@@ -93,9 +93,8 @@ void main() {
     expect(find.text('SENECApp Events'), findsOneWidget);
   });
 
-  testWidgets('create form stays disabled until name and category are set', (
-    tester,
-  ) async {
+  testWidgets('create form stays disabled until name, category and '
+      'description are set', (tester) async {
     await pumpSignedIn(tester);
 
     await tester.tap(find.text('New RSO'));
@@ -132,6 +131,16 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'Surf Club');
     await tester.pumpAndSettle();
     await tester.tap(find.text('Travel'));
+    await tester.pumpAndSettle();
+
+    // Still not enough: the backend wants a description of 20+ characters.
+    await tapSubmit();
+    expect(find.text('Proposal Submitted!'), findsNothing);
+
+    await tester.enterText(
+      find.byType(TextField).last,
+      'Weekend surf trips to the Caribbean coast.',
+    );
     await tester.pumpAndSettle();
 
     await tapSubmit();

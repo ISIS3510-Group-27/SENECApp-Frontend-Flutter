@@ -5,6 +5,10 @@ import '../../core/theme/app_colors.dart';
 import 'campus_event.dart';
 import 'rso_category.dart';
 
+/// Where a group stands with Uniandes Student Affairs. Student-created groups
+/// start [pending]; only their creator sees them until they're [approved].
+enum ReviewStatus { pending, approved, rejected }
+
 /// A Registered Student Organization.
 ///
 /// Lists (`GET /groups`) return the summary fields. The profile
@@ -30,6 +34,8 @@ class Rso {
     this.websiteUrl,
     this.meetingBuilding,
     this.upcomingEvents = const [],
+    this.reviewStatus = ReviewStatus.approved,
+    this.rejectionReason,
   });
 
   factory Rso.fromJson(Map<String, dynamic> json) {
@@ -62,6 +68,10 @@ class Rso {
       instagramUrl: json['instagram_url'] as String?,
       websiteUrl: json['website_url'] as String?,
       meetingBuilding: building?['name'] as String?,
+      reviewStatus:
+          ReviewStatus.values.asNameMap()[json['review_status']] ??
+          ReviewStatus.approved,
+      rejectionReason: json['rejection_reason'] as String?,
       upcomingEvents: [
         for (final event in json['upcoming_events'] as List? ?? const [])
           CampusEvent.fromJson(
@@ -95,6 +105,13 @@ class Rso {
   final bool isSaved;
 
   final DateTime? nextEventAt;
+
+  final ReviewStatus reviewStatus;
+
+  /// Why Student Affairs turned the proposal down, when it did.
+  final String? rejectionReason;
+
+  bool get isApproved => reviewStatus == ReviewStatus.approved;
 
   // --- Profile only ---------------------------------------------------------
 

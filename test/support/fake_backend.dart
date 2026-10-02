@@ -19,7 +19,9 @@ class FakeBackend {
     bool withSchedule = true,
     this.liveEventId,
     this.adminOf = const {},
+    Map<int, Map<String, dynamic>> proposals = const {},
   }) : me = me is Map ? {...me} : me,
+       proposals = {...proposals},
        memberIds = {...memberIds},
        schedule = [
          if (withSchedule)
@@ -39,6 +41,35 @@ class FakeBackend {
 
   /// Groups the student is an admin of: they get the check-in QR codes.
   final Set<int> adminOf;
+
+  /// Groups the student proposed, by id: only they see them. Each is also
+  /// one of [memberIds] (the creator is the admin).
+  final Map<int, Map<String, dynamic>> proposals;
+
+  /// A proposal as the backend returns it.
+  static Map<String, dynamic> proposal({
+    required int id,
+    required String name,
+    String category = 'travel',
+    String reviewStatus = 'pending',
+    String? rejectionReason,
+  }) => {
+    'id': id,
+    'name': name,
+    'category': {'id': 5, 'slug': category, 'label': _categories[category]},
+    'description': 'A group proposed by the student, waiting for review.',
+    'color': null,
+    'image_url': null,
+    'verified': false,
+    'is_active': true,
+    'review_status': reviewStatus,
+    'rejection_reason': rejectionReason,
+    'member_count': 1,
+    'tags': <Object>[],
+    'next_event': null,
+    'is_member': true,
+    'is_saved': false,
+  };
 
   /// Events the student has checked in to.
   final Set<int> attended = {};
@@ -120,6 +151,18 @@ class FakeBackend {
     (26, 'Cars'),
     (30, 'Theater'),
   ];
+
+  static const _interestCategories = {
+    1: 'sports',
+    7: 'business',
+    11: 'business',
+    12: 'technology',
+    15: 'business',
+    23: 'travel',
+    24: 'arts',
+    26: 'cars',
+    30: 'arts',
+  };
 
   static const _categories = {
     'sports': 'Sports',
@@ -457,6 +500,23 @@ class FakeBackend {
           'offset': 0,
         });
 
+      case ('POST', ['groups']):
+        return _propose(jsonDecode(request.body) as Map<String, dynamic>);
+
+      case ('GET', ['groups', final id])
+          when proposals.containsKey(int.parse(id)):
+        return jsonResponse({
+          ...proposals[int.parse(id)]!,
+          'founded_year': null,
+          'contact_email': null,
+          'instagram_url': null,
+          'website_url': null,
+          'meeting_building': null,
+          'upcoming_events': <Object>[],
+          'my_role': 'admin',
+          'created_at': _now.toIso8601String(),
+        });
+
       case ('GET', ['groups', final id]):
         return jsonResponse(_groupJson(int.parse(id), detail: true));
 
@@ -479,7 +539,9 @@ class FakeBackend {
         });
 
       case ('GET', ['me', 'groups']):
-        return jsonResponse([for (final id in memberIds) _groupJson(id)]);
+        return jsonResponse([
+          for (final id in memberIds) proposals[id] ?? _groupJson(id),
+        ]);
 
       case ('GET', ['events']):
         final mine = query['mine']?.first == 'true';
@@ -529,7 +591,17 @@ class FakeBackend {
       case ('GET', ['interests']):
         return jsonResponse([
           for (final (id, name) in _interests)
-            {'id': id, 'slug': name, 'name': name, 'category': null},
+            {
+              'id': id,
+              'slug': name,
+              'name': name,
+              'category': {
+                'id': 1,
+                'slug': _interestCategories[id],
+                'label': _categories[_interestCategories[id]],
+                'icon': null,
+              },
+            },
         ]);
 
       case ('GET', ['buildings']):
@@ -544,6 +616,41 @@ class FakeBackend {
         ]);
     }
     return jsonResponse({'detail': 'Not Found'}, 404);
+  }
+
+  /// The real rules: exactly one category, a 20+ character description, and
+  /// a name nobody has. The proposal starts pending, with the student as admin.
+  http.Response _propose(Map<String, dynamic> body) {
+    final name = body['name'] as String;
+    final taken = [
+      for (final g in _groups) g.$2,
+      for (final p in proposals.values) p['name'] as String,
+    ].any((n) => n.toLowerCase() == name.toLowerCase());
+    if (taken) {
+      return jsonResponse({
+        'detail': 'A group with this name already exists',
+      }, 409);
+    }
+    if ((body['category'] == null) == (body['category_id'] == null) ||
+        (body['description'] as String).length < 20) {
+      return jsonResponse({
+        'detail': [
+          {'msg': 'Invalid group proposal'},
+        ],
+      }, 422);
+    }
+    final id = 100 + proposals.length;
+    proposals[id] = proposal(
+      id: id,
+      name: name,
+      category: body['category'] as String,
+    );
+    memberIds.add(id);
+    return jsonResponse({
+      ...proposals[id]!,
+      'my_role': 'admin',
+      'upcoming_events': <Object>[],
+    }, 201);
   }
 
   /// The real rules: right code, within the check-in window, and within

@@ -34,7 +34,8 @@ class AppNotification {
   final int id;
 
   /// `new_event`, `group_recommendation`, `group_message` or
-  /// `event_reminder`: the families BQ8 compares.
+  /// `event_reminder` (the families BQ8 compares), or `group_review`: the
+  /// outcome of the student's group proposal.
   final String type;
 
   /// e.g. `New event from Tennis Uniandes`.
@@ -76,6 +77,7 @@ class AppNotification {
     'new_event' || 'event_reminder' => AppColors.accent,
     'group_recommendation' => AppColors.teal,
     'group_message' => AppColors.blue,
+    'group_review' => AppColors.violet,
     _ => AppColors.mutedForeground,
   };
 
@@ -84,6 +86,7 @@ class AppNotification {
     'event_reminder' => Icons.alarm_rounded,
     'group_recommendation' => Icons.auto_awesome_rounded,
     'group_message' => Icons.forum_rounded,
+    'group_review' => Icons.fact_check_rounded,
     _ => Icons.notifications_rounded,
   };
 }
