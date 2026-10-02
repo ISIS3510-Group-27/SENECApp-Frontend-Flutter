@@ -7,6 +7,7 @@ import '../data/models/rso.dart';
 import '../data/models/student_profile.dart';
 import '../data/repositories/events_repository.dart';
 import '../data/repositories/groups_repository.dart';
+import '../data/repositories/me_repository.dart';
 import '../data/repositories/notifications_repository.dart';
 
 /// The signed-in student's relationship to the catalogue: what they joined,
@@ -18,19 +19,25 @@ import '../data/repositories/notifications_repository.dart';
 /// they sign out.
 class AppState extends ChangeNotifier {
   AppState({
-    required this.student,
+    required StudentProfile student,
+    required MeRepository me,
     required GroupsRepository groups,
     required EventsRepository events,
     required NotificationsRepository notifications,
     DateTime Function() clock = DateTime.now,
-  }) : _groups = groups,
+  }) : _student = student,
+       _me = me,
+       _groups = groups,
        _events = events,
        _notificationsRepo = notifications,
        _clock = clock;
 
-  /// The signed-in student, from the backend's `GET /me`.
-  final StudentProfile student;
+  StudentProfile _student;
 
+  /// The signed-in student, from the backend's `GET /me`.
+  StudentProfile get student => _student;
+
+  final MeRepository _me;
   final GroupsRepository _groups;
   final EventsRepository _events;
   final NotificationsRepository _notificationsRepo;
@@ -43,6 +50,15 @@ class AppState extends ChangeNotifier {
     refreshNotifications(),
     refreshAttendance(),
   ]);
+
+  // --- Profile -------------------------------------------------------------
+
+  /// Allows (or stops) using the phone's location for suggestions. Throws
+  /// [ApiException] if the backend refuses.
+  Future<void> setLocationOptIn(bool optIn) async {
+    _student = await _me.setLocationOptIn(optIn);
+    notifyListeners();
+  }
 
   // --- Memberships ---------------------------------------------------------
 
@@ -61,6 +77,10 @@ class AppState extends ChangeNotifier {
   /// Changes whenever the student joins a group, so screens listing "my"
   /// things know to fetch again.
   int get membershipVersion => _membershipVersion;
+
+  /// Whether the student belongs to the group with [groupId], once their
+  /// groups have loaded.
+  bool isMemberOf(int groupId) => _memberIds.contains(groupId);
 
   bool isMember(Rso rso) =>
       _myGroups == null ? rso.isMember : _memberIds.contains(rso.id);

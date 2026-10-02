@@ -2,6 +2,11 @@
     <!-- Talks to the SENECApp backend. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- "Free right now" finds events within walking distance. Only while the
+         app is open, and only after the student opts in. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+
     <application
         android:label="senecapp"
         android:name="${applicationName}"

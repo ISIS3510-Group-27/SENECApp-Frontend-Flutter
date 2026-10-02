@@ -64,6 +64,7 @@ class _SessionGate extends StatelessWidget {
           final services = context.read<AppServices>();
           return AppState(
             student: session.student!,
+            me: services.me,
             groups: services.groups,
             events: services.events,
             notifications: services.notifications,

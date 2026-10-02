@@ -6,9 +6,11 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/api/api_client.dart';
 import '../../data/models/student_profile.dart';
 import '../../state/app_state.dart';
 import '../../state/session_controller.dart';
+import '../schedule/schedule_screen.dart';
 
 /// The student's own page: identity, interests and account settings.
 class ProfileScreen extends StatelessWidget {
@@ -103,6 +105,10 @@ class ProfileScreen extends StatelessWidget {
             clipContents: true,
             child: Column(
               children: [
+                const _ScheduleRow(),
+                const Divider(),
+                const _LocationRow(),
+                const Divider(),
                 for (final (label, subtitle) in _settings) ...[
                   _SettingsRow(label: label, subtitle: subtitle),
                   const Divider(),
@@ -354,6 +360,68 @@ class _SignOutRow extends StatelessWidget {
         ),
       ),
       onTap: () => context.read<SessionController>().signOut(),
+    );
+  }
+}
+
+class _ScheduleRow extends StatelessWidget {
+  const _ScheduleRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      title: Text(
+        'Class schedule',
+        style: AppTheme.body(size: 14, weight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        'Used to suggest events in your free time',
+        style: AppTheme.body(size: 12, color: AppColors.mutedForeground),
+      ),
+      trailing: const Icon(
+        Icons.chevron_right_rounded,
+        size: 20,
+        color: AppColors.mutedForeground,
+      ),
+      onTap: () => Navigator.of(context).push(ScheduleScreen.route()),
+    );
+  }
+}
+
+/// Consent to use the phone's location for "Free right now". Turning it off
+/// stops the backend from using GPS at all.
+class _LocationRow extends StatelessWidget {
+  const _LocationRow();
+
+  Future<void> _set(BuildContext context, bool optIn) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().setLocationOptIn(optIn);
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final optedIn = context.select<AppState, bool>(
+      (s) => s.student.locationOptIn,
+    );
+
+    return SwitchListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      title: Text(
+        'Use my location',
+        style: AppTheme.body(size: 14, weight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        'Suggest events within walking distance',
+        style: AppTheme.body(size: 12, color: AppColors.mutedForeground),
+      ),
+      value: optedIn,
+      activeThumbColor: AppColors.accent,
+      onChanged: (value) => _set(context, value),
     );
   }
 }

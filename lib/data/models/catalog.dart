@@ -16,10 +16,16 @@ class Interest {
 /// A campus building where groups meet and events happen.
 @immutable
 class Building {
-  const Building({required this.code, required this.name});
+  const Building({required this.id, required this.code, required this.name});
 
-  factory Building.fromJson(Map<String, dynamic> json) =>
-      Building(code: json['code'] as String, name: json['name'] as String);
+  factory Building.fromJson(Map<String, dynamic> json) => Building(
+    id: json['id'] as int,
+    code: json['code'] as String,
+    name: json['name'] as String,
+  );
+
+  /// What a class in the schedule points to.
+  final int id;
 
   /// Short code the backend filters by, e.g. `ML`.
   final String code;

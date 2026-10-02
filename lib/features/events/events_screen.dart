@@ -12,7 +12,9 @@ import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/entry_point.dart';
 import '../../state/app_state.dart';
-import '../rso_detail/rso_detail_screen.dart';
+import '../check_in/check_in_screen.dart';
+import '../event_detail/event_detail_screen.dart';
+import '../free_now/free_now_screen.dart';
 
 /// Every upcoming event, filterable down to the student's own
 ///  organizations.
@@ -69,6 +71,15 @@ class _EventsScreenState extends State<EventsScreen> {
     }
   }
 
+  Future<void> _scan() async {
+    final result = await Navigator.of(context).push(CheckInScreen.route());
+    // Checked in from here: refresh so the event shows it.
+    if (result != null && mounted) {
+      _events.clear();
+      _load(joinedOnly: _joinedOnly);
+    }
+  }
+
   void _select({required bool joinedOnly}) {
     setState(() => _joinedOnly = joinedOnly);
     if (!_events.containsKey(joinedOnly)) _load(joinedOnly: joinedOnly);
@@ -87,21 +98,42 @@ class _EventsScreenState extends State<EventsScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(kPageGutter, 8, kPageGutter, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  'UPCOMING',
-                  style: AppTheme.body(
-                    size: 11,
-                    weight: FontWeight.w700,
-                    color: AppColors.mutedForeground,
-                    letterSpacing: 1.8,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'UPCOMING',
+                        style: AppTheme.body(
+                          size: 11,
+                          weight: FontWeight.w700,
+                          color: AppColors.mutedForeground,
+                          letterSpacing: 1.8,
+                        ),
+                      ),
+                      Text(
+                        'SENECApp Events',
+                        style: AppTheme.heading(size: 24),
+                      ),
+                    ],
                   ),
                 ),
-                Text('SENECApp Events', style: AppTheme.heading(size: 24)),
+                // At the venue, straight to the camera without finding the
+                // event first.
+                RoundIconButton(
+                  icon: Icons.qr_code_scanner_rounded,
+                  tooltip: 'Scan check-in code',
+                  onPressed: _scan,
+                ),
               ],
             ),
+          ),
+          const SizedBox(height: 20),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: kPageGutter),
+            child: _FreeNowCard(),
           ),
           if (_events[false] case final all?) ...[
             const SizedBox(height: 20),
@@ -151,9 +183,10 @@ class _EventsScreenState extends State<EventsScreen> {
                 child: _EventCard(
                   event: event,
                   onTap: () => Navigator.of(context).push(
-                    RsoDetailScreen.route(
-                      event.rsoId,
-                      entryPoint: EntryPoint.event,
+                    EventDetailScreen.route(
+                      event.id,
+                      entryPoint: EventEntryPoint.events,
+                      preview: event,
                     ),
                   ),
                 ),
@@ -358,6 +391,50 @@ class _NoJoinedEvents extends StatelessWidget {
             'Join an organization on Discover and its events show up here.',
             textAlign: TextAlign.center,
             style: AppTheme.body(size: 13, color: AppColors.mutedForeground),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The way into "Free right now": what's on in the gap before the next class.
+class _FreeNowCard extends StatelessWidget {
+  const _FreeNowCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      onTap: () => Navigator.of(context).push(FreeNowScreen.route()),
+      border: AppColors.accent.withValues(alpha: 0.35),
+      child: Row(
+        children: [
+          const TintedIconTile(
+            icon: Icons.near_me_rounded,
+            color: AppColors.accent,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Free right now?', style: AppTheme.heading(size: 15)),
+                const SizedBox(height: 2),
+                Text(
+                  'Events nearby that fit before your next class',
+                  style: AppTheme.body(
+                    size: 12,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.chevron_right_rounded,
+            size: 20,
+            color: AppColors.mutedForeground,
           ),
         ],
       ),

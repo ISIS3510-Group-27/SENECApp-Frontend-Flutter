@@ -82,7 +82,7 @@ void main() {
 
     await tester.tap(find.text('Round Robin Tournament'));
     await tester.pumpAndSettle();
-    expect(find.text('ABOUT'), findsOneWidget);
+    expect(find.text('HOSTED BY'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();

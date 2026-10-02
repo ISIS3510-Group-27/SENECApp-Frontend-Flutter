@@ -18,6 +18,9 @@ class CampusEvent {
     this.locationDetail,
     this.isCancelled = false,
     this.checkedIn = false,
+    this.description,
+    this.capacity,
+    this.attendeeCount,
   });
 
   /// Reads an event from the API.
@@ -47,6 +50,9 @@ class CampusEvent {
       locationDetail: json['location_detail'] as String?,
       isCancelled: json['is_cancelled'] as bool? ?? false,
       checkedIn: json['checked_in'] as bool? ?? false,
+      description: json['description'] as String?,
+      capacity: json['capacity'] as int?,
+      attendeeCount: json['attendee_count'] as int?,
     );
   }
 
@@ -72,11 +78,49 @@ class CampusEvent {
   /// The student scanned the QR code at this event.
   final bool checkedIn;
 
+  final String? description;
+
+  /// Maximum attendees, if the organizers set one.
+  final int? capacity;
+
+  /// Students checked in so far. Missing on events nested in a group profile.
+  final int? attendeeCount;
+
   /// `Sat, Aug 22`
   String get date => Dates.day(startsAt);
 
   /// `8:00 AM`
   String get time => Dates.time(startsAt);
+
+  /// When check-in opens before the event starts and closes after it ends.
+  /// Mirrors the backend's defaults (`CHECK_IN_OPENS_MINUTES`,
+  /// `CHECK_IN_CLOSES_MINUTES`); the backend has the final say.
+  static const checkInOpensBefore = Duration(minutes: 30);
+  static const checkInClosesAfter = Duration(minutes: 15);
+
+  bool checkInOpenAt(DateTime now) =>
+      !now.isBefore(startsAt.subtract(checkInOpensBefore)) &&
+      !now.isAfter(endsAt.add(checkInClosesAfter));
+
+  CampusEvent copyWith({bool? checkedIn}) => CampusEvent(
+    id: id,
+    rsoId: rsoId,
+    rsoName: rsoName,
+    title: title,
+    startsAt: startsAt,
+    endsAt: endsAt,
+    color: color,
+    buildingName: buildingName,
+    locationDetail: locationDetail,
+    isCancelled: isCancelled,
+    checkedIn: checkedIn ?? this.checkedIn,
+    description: description,
+    capacity: capacity,
+    attendeeCount: attendeeCount,
+  );
+
+  /// `8:00 AM - 10:00 AM`
+  String get timeRange => '${Dates.time(startsAt)} - ${Dates.time(endsAt)}';
 
   /// `Edificio Mario Laserna · Salón 224`
   String get location {

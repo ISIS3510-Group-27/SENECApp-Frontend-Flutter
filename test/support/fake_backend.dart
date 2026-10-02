@@ -13,13 +13,56 @@ import 'fakes.dart';
 /// check what the app sent.
 class FakeBackend {
   FakeBackend({
-    this.me = sofiaJson,
+    Object me = sofiaJson,
     this.meStatus = 200,
     Set<int> memberIds = const {1, 2, 5},
-  }) : memberIds = {...memberIds};
+    bool withSchedule = true,
+    this.liveEventId,
+    this.adminOf = const {},
+  }) : me = me is Map ? {...me} : me,
+       memberIds = {...memberIds},
+       schedule = [
+         if (withSchedule)
+           {
+             'id': 1,
+             'weekday': 0,
+             'start_time': '08:30:00',
+             'end_time': '09:50:00',
+             'title': 'Cálculo II',
+             'building': _building,
+           },
+       ];
 
+  /// An event moved to right now (started 10 minutes ago), so check-in is
+  /// open. Every other event is days away.
+  final int? liveEventId;
+
+  /// Groups the student is an admin of: they get the check-in QR codes.
+  final Set<int> adminOf;
+
+  /// Events the student has checked in to.
+  final Set<int> attended = {};
+
+  /// Every event's check-in code.
+  static String checkInCode(int eventId) => 'K7Q2X$eventId';
+
+  /// `GET /me`; a `PATCH /me` changes it.
   final Object me;
   final int meStatus;
+
+  /// `GET /me/schedule`, as the backend stores it.
+  List<Map<String, dynamic>> schedule;
+
+  /// The `request_id` of every "Free right now" answer.
+  static const freeNowRequestId = '6d2f9b1a-8c4e-4f7a-b3d5-1e9a0c2b7f64';
+
+  static const _building = {
+    'id': 1,
+    'code': 'ML',
+    'name': 'Edificio Mario Laserna',
+    'latitude': 4.6026,
+    'longitude': -74.0649,
+  };
 
   final Set<int> memberIds;
   final Set<int> savedIds = {};
@@ -299,7 +342,9 @@ class FakeBackend {
   Map<String, dynamic> _eventJson(int id, {bool withGroup = true}) {
     final e = _events.firstWhere((e) => e.$1 == id);
     final g = _groups.firstWhere((g) => g.$1 == e.$2);
-    final starts = _inDays(e.$4, e.$5);
+    final starts = e.$1 == liveEventId
+        ? _now.subtract(const Duration(minutes: 10))
+        : _inDays(e.$4, e.$5);
     return {
       'id': e.$1,
       'group_id': e.$2,
@@ -320,7 +365,7 @@ class FakeBackend {
         'capacity': null,
         'group': {'id': g.$1, 'name': g.$2, 'color': g.$5},
         'attendee_count': 0,
-        'checked_in': false,
+        'checked_in': attended.contains(e.$1),
       },
     };
   }
@@ -338,6 +383,50 @@ class FakeBackend {
     switch ((request.method, segments)) {
       case ('GET', ['me']):
         return jsonResponse(me, meStatus);
+
+      case ('PATCH', ['me']):
+        (me as Map).addAll(jsonDecode(request.body) as Map);
+        return jsonResponse(me);
+
+      case ('GET', ['me', 'schedule']):
+        return jsonResponse(schedule);
+
+      case ('PUT', ['me', 'schedule']):
+        final blocks = (jsonDecode(request.body) as Map)['blocks'] as List;
+        schedule = [
+          for (final (i, block) in blocks.indexed)
+            {
+              'id': i + 1,
+              'weekday': block['weekday'],
+              'start_time': block['start_time'],
+              'end_time': block['end_time'],
+              'title': block['title'],
+              'building': block['building_id'] == 1 ? _building : null,
+            },
+        ];
+        return jsonResponse(schedule);
+
+      case ('GET', ['recommendations', 'events', 'free-now']):
+        return jsonResponse(_freeNow(request.url.queryParameters));
+
+      case ('GET', ['events', final id, 'check-in-code']):
+        final event = _events.firstWhere((e) => e.$1 == int.parse(id));
+        if (!adminOf.contains(event.$2)) {
+          return jsonResponse({'detail': 'Group admin role required'}, 403);
+        }
+        return jsonResponse({
+          'event_id': event.$1,
+          'code': checkInCode(event.$1),
+          'qr_payload':
+              'senecapp://check-in?event_id=${event.$1}'
+              '&code=${checkInCode(event.$1)}',
+        });
+
+      case ('POST', ['events', final id, 'check-in']):
+        return _checkIn(int.parse(id), jsonDecode(request.body) as Map);
+
+      case ('GET', ['events', final id]):
+        return jsonResponse(_eventJson(int.parse(id)));
 
       case ('GET', ['groups']):
         final items = _search(query);
@@ -435,6 +524,90 @@ class FakeBackend {
         ]);
     }
     return jsonResponse({'detail': 'Not Found'}, 404);
+  }
+
+  /// The real rules: right code, within the check-in window, and within
+  /// 500 m of the venue when a position is sent. Twice is fine.
+  http.Response _checkIn(int eventId, Map body) {
+    if (body['code'] != checkInCode(eventId)) {
+      return jsonResponse({'detail': 'Invalid check-in code'}, 422);
+    }
+    if (attended.contains(eventId)) {
+      return jsonResponse({
+        'event_id': eventId,
+        'checked_in_at': _now.toIso8601String(),
+        'distance_m': null,
+        'already_checked_in': true,
+      });
+    }
+    if (eventId != liveEventId) {
+      return jsonResponse({
+        'detail': "Check-in is only open around the event's time",
+      }, 409);
+    }
+    double? distance;
+    if (body['latitude'] case final num latitude) {
+      // Roughly metres from Mario Laserna; enough for a fake.
+      distance =
+          ((latitude - 4.6026).abs() +
+              ((body['longitude'] as num) + 74.0649).abs()) *
+          111000;
+      if (distance > 500) {
+        return jsonResponse({
+          'detail': 'You seem to be too far from the event to check in',
+        }, 409);
+      }
+    }
+    attended.add(eventId);
+    return jsonResponse({
+      'event_id': eventId,
+      'checked_in_at': _now.toIso8601String(),
+      'distance_m': distance,
+      'already_checked_in': false,
+    });
+  }
+
+  /// Mirrors the real rules: GPS only with consent, else the class
+  /// schedule's building; no schedule means "free for two hours".
+  Map<String, dynamic> _freeNow(Map<String, String> query) {
+    final optedIn = (me as Map)['location_opt_in'] == true;
+    final gps = optedIn && query.containsKey('latitude');
+    final source = gps
+        ? 'gps'
+        : schedule.isNotEmpty
+        ? 'schedule'
+        : 'none';
+    return {
+      'request_id': freeNowRequestId,
+      'free_block': {
+        'starts_at': _now.toIso8601String(),
+        'ends_at': _now.add(const Duration(minutes: 70)).toIso8601String(),
+        'minutes': 70,
+      },
+      'schedule_known': schedule.isNotEmpty,
+      'location': {
+        'building': source == 'none' ? null : _building,
+        'source': source,
+        'on_campus': gps ? true : null,
+      },
+      'items': [
+        {
+          'event': _eventJson(2),
+          'distance_m': 240.0,
+          'walking_minutes': 4,
+          'score': 0.81,
+          'reasons': ['4 min walk', 'Matches your interests'],
+        },
+        {
+          'event': _eventJson(3),
+          'distance_m': null,
+          'walking_minutes': null,
+          'score': 0.62,
+          'reasons': ['From one of your groups'],
+        },
+      ],
+      'message': null,
+    };
   }
 
   List<Map<String, dynamic>> _search(Map<String, List<String>> query) {

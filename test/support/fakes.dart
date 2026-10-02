@@ -9,6 +9,7 @@ import 'package:senecapp/app_services.dart';
 import 'package:senecapp/data/api/api_client.dart';
 import 'package:senecapp/data/api/client_context.dart';
 import 'package:senecapp/data/auth/auth_service.dart';
+import 'package:senecapp/data/location/location_service.dart';
 
 import 'fake_backend.dart';
 
@@ -122,10 +123,17 @@ MockClient fakeBackend({Object me = sofiaJson, int meStatus = 200}) =>
     FakeBackend(me: me, meStatus: meStatus).client;
 
 /// Services wired to [backend], a [FakeBackend] unless given.
-AppServices testServices({FakeAuthService? auth, http.Client? backend}) {
+AppServices testServices({
+  FakeAuthService? auth,
+  http.Client? backend,
+  LocationService? location,
+  FakeQrCamera? camera,
+}) {
   final fakeAuth = auth ?? FakeAuthService();
   return AppServices(
     auth: fakeAuth,
+    location: location ?? FakeLocationService(),
+    qrCamera: (camera ?? FakeQrCamera()).build,
     api: ApiClient(
       baseUrl: 'http://test/api/v1',
       auth: fakeAuth,
@@ -152,4 +160,48 @@ Future<void> pumpApp(WidgetTester tester, AppServices services) async {
 
   await tester.pumpWidget(SenecApp(services: services));
   await tester.pumpAndSettle();
+}
+
+/// GPS that answers [result] (by default: standing at Mario Laserna).
+class FakeLocationService implements LocationService {
+  FakeLocationService({
+    this.result = const LocationResult.found(4.6026, -74.0649),
+  });
+
+  LocationResult result;
+
+  /// How many times the position was read.
+  int reads = 0;
+
+  final List<LocationProblem> settingsOpened = [];
+
+  @override
+  Future<LocationResult> current() async {
+    reads++;
+    return result;
+  }
+
+  @override
+  Future<void> openSettings(LocationProblem problem) async =>
+      settingsOpened.add(problem);
+}
+
+/// A camera that "sees" whatever a test passes to [scan].
+class FakeQrCamera {
+  ValueChanged<String>? _onCode;
+
+  Widget build(BuildContext context, ValueChanged<String> onCode) {
+    _onCode = onCode;
+    return const ColoredBox(
+      key: Key('fake-camera'),
+      color: Colors.black,
+      child: SizedBox.expand(),
+    );
+  }
+
+  /// Whether the scanner is showing the camera right now.
+  bool get showing =>
+      find.byKey(const Key('fake-camera')).evaluate().isNotEmpty;
+
+  void scan(String text) => _onCode!(text);
 }

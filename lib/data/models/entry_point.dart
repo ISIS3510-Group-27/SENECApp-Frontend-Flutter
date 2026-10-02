@@ -17,3 +17,21 @@ enum EntryPoint {
   /// Anywhere else, e.g. the student's own groups.
   direct,
 }
+
+/// How the student reached an event's page. Sent when it is opened, so BQ3
+/// can count which "Free right now" suggestions get looked at.
+enum EventEntryPoint {
+  /// A "Free right now" suggestion.
+  freeNow('free_now'),
+
+  /// The Events tab.
+  events('events'),
+
+  /// A group profile's upcoming events.
+  groupDetail('group_detail');
+
+  const EventEntryPoint(this.value);
+
+  /// What the backend receives.
+  final String value;
+}

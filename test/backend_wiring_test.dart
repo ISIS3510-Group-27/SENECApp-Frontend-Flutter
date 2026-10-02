@@ -213,6 +213,8 @@ void main() {
       // The student's groups are Tennis, Emprendedores and AI & ML.
       expect(find.text('LLM Workshop: Build Your Own Agent'), findsOneWidget);
       expect(find.text('Round Robin Tournament'), findsOneWidget);
+      // Third in the list, below the fold at phone size.
+      await tester.scrollUntilVisible(find.text('Pitch Night #14'), 300);
       expect(find.text('Pitch Night #14'), findsOneWidget);
       expect(
         find.text('Open Auditions: Obra de Semestre', skipOffstage: false),
@@ -220,12 +222,23 @@ void main() {
       );
     });
 
-    testWidgets("an event opens its group as an event entry", (tester) async {
+    testWidgets('an event opens its page, and its host as an event entry', (
+      tester,
+    ) async {
       await openApp(tester);
 
       await tester.tap(find.text('Events'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('Pitch Night #14'), 300);
       await tester.tap(find.text('Pitch Night #14'));
+      await tester.pumpAndSettle();
+
+      expect(
+        backend.requestsTo('GET', '/events/3').single.url.queryParameters,
+        {'entry_point': 'events'},
+      );
+
+      await tester.tap(find.text('Emprendedores Uniandes'));
       await tester.pumpAndSettle();
 
       expect(

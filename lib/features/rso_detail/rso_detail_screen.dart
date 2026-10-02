@@ -14,6 +14,7 @@ import '../../data/models/campus_event.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/rso.dart';
 import '../../state/app_state.dart';
+import '../event_detail/event_detail_screen.dart';
 
 /// Level two of the hierarchy, and the deepest the app goes: from here the
 /// student can join, which is the whole point of Discover.
@@ -402,6 +403,13 @@ class _DetailEventRow extends StatelessWidget {
     return AppCard(
       padding: const EdgeInsets.all(12),
       border: Colors.transparent,
+      onTap: () => Navigator.of(context).push(
+        EventDetailScreen.route(
+          event.id,
+          entryPoint: EventEntryPoint.groupDetail,
+          preview: event,
+        ),
+      ),
       child: Row(
         children: [
           const TintedIconTile(
