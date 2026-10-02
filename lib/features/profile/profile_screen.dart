@@ -8,6 +8,7 @@ import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/models/student_profile.dart';
 import '../../state/app_state.dart';
+import '../../state/session_controller.dart';
 
 /// The student's own page: identity, interests and account settings.
 class ProfileScreen extends StatelessWidget {
@@ -102,10 +103,11 @@ class ProfileScreen extends StatelessWidget {
             clipContents: true,
             child: Column(
               children: [
-                for (final (index, (label, subtitle)) in _settings.indexed) ...[
+                for (final (label, subtitle) in _settings) ...[
                   _SettingsRow(label: label, subtitle: subtitle),
-                  if (index < _settings.length - 1) const Divider(),
+                  const Divider(),
                 ],
+                const _SignOutRow(),
               ],
             ),
           ),
@@ -202,7 +204,7 @@ class _IdentityCard extends StatelessWidget {
                             const SizedBox(width: 4),
                             Flexible(
                               child: Text(
-                                student.program,
+                                student.program ?? 'Uniandes student',
                                 style: AppTheme.body(
                                   size: 10,
                                   weight: FontWeight.w800,
@@ -223,7 +225,10 @@ class _IdentityCard extends StatelessWidget {
               children: [
                 _MiniStat(value: '$joinedCount', label: 'RSOs'),
                 _MiniStat(value: '$eventsAttended', label: 'Events'),
-                _MiniStat(value: '${student.yearsActive}', label: 'Years'),
+                _MiniStat(
+                  value: student.semester?.toString() ?? '–',
+                  label: 'Semester',
+                ),
               ],
             ),
           ],
@@ -322,6 +327,31 @@ class _SettingsRow extends StatelessWidget {
       onTap: () => ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('$label is coming soon.'))),
+    );
+  }
+}
+
+class _SignOutRow extends StatelessWidget {
+  const _SignOutRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: const Icon(
+        Icons.logout_rounded,
+        size: 20,
+        color: AppColors.accent,
+      ),
+      title: Text(
+        'Sign out',
+        style: AppTheme.body(
+          size: 14,
+          weight: FontWeight.w700,
+          color: AppColors.accent,
+        ),
+      ),
+      onTap: () => context.read<SessionController>().signOut(),
     );
   }
 }

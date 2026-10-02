@@ -3,7 +3,6 @@ import '../models/app_notification.dart';
 import '../models/campus_event.dart';
 import '../models/rso.dart';
 import '../models/rso_category.dart';
-import '../models/student_profile.dart';
 
 /// Burned data in the front, until we create a backend.
 ///
@@ -48,8 +47,6 @@ class RsoRepository {
 
   List<AppNotification> allNotifications() => _notifications;
 
-  StudentProfile currentStudent() => _student;
-
   /// Memberships the student already holds when the app first opens.
   static const seedMembershipIds = {1, 2, 5};
 
@@ -64,14 +61,6 @@ class RsoRepository {
 
   /// The date range covered by the Events screen banner.
   static const eventsWeekRange = 'Aug 18 - Aug 24, 2025';
-
-  static const _student = StudentProfile(
-    name: 'Sofía Arango',
-    email: 's.arango@uniandes.edu.co',
-    program: 'Ingeniería de Sistemas · 6to semestre',
-    interests: ['Tennis', 'AI/ML', 'Startups', 'Travel', 'Cars'],
-    yearsActive: 2,
-  );
 
   static const _rsos = <Rso>[
     Rso(

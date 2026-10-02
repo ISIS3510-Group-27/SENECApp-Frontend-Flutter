@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app.dart';
+import 'app_services.dart';
 import 'core/assets/asset_catalog.dart';
 import 'core/theme/app_colors.dart';
 
@@ -22,5 +23,5 @@ Future<void> main() async {
     ),
   );
 
-  runApp(const SenecApp());
+  runApp(SenecApp(services: await AppServices.create()));
 }

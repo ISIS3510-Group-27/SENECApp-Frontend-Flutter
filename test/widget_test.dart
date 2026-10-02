@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:senecapp/app.dart';
 import 'package:senecapp/core/assets/asset_catalog.dart';
 import 'package:senecapp/features/create_rso/create_rso_screen.dart';
+
+import 'support/fakes.dart';
 
 void main() {
   setUpAll(() {
@@ -13,28 +14,21 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
   });
 
-  /// Pumps the app at phone size so PhoneFrame steps aside and layouts match
-  /// what a device would show
-  Future<void> pumpApp(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(const SenecApp());
-    await tester.pumpAndSettle();
-  }
+  /// Opens the app with the demo student already signed in.
+  Future<void> pumpSignedIn(WidgetTester tester) =>
+      pumpApp(tester, testServices(auth: signedInAuth()));
 
   testWidgets('opens on Discover with every organization listed', (
     tester,
   ) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     expect(find.text('SENECApp'), findsOneWidget);
     expect(find.text('8 ORGANIZATIONS'), findsOneWidget);
   });
 
   testWidgets('category chip narrows the list', (tester) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     await tester.tap(find.text('Sports'));
     await tester.pumpAndSettle();
@@ -45,7 +39,7 @@ void main() {
   });
 
   testWidgets('search matches on category as well as name', (tester) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     await tester.enterText(find.byType(TextField).first, 'business');
     await tester.pumpAndSettle();
@@ -55,7 +49,7 @@ void main() {
   });
 
   testWidgets('joining an organization updates My RSOs', (tester) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     // Viajeros Uniandes is not one of the seeded memberships.
     await tester.tap(find.text('Viajeros Uniandes'));
@@ -76,7 +70,7 @@ void main() {
   testWidgets('back from a detail returns to the tab it was opened from', (
     tester,
   ) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     await tester.tap(find.text('Events'));
     await tester.pumpAndSettle();
@@ -96,7 +90,7 @@ void main() {
   testWidgets('create form stays disabled until name and category are set', (
     tester,
   ) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     await tester.tap(find.text('New RSO'));
     await tester.pumpAndSettle();
@@ -156,7 +150,7 @@ void main() {
   });
 
   testWidgets('notifications can all be marked read', (tester) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     await tester.tap(find.byTooltip('Notifications'));
     await tester.pumpAndSettle();

@@ -4,4 +4,9 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- The local backend is plain HTTP (http://10.0.2.2:8000 from the
+         emulator, the laptop's LAN IP from a phone). Allowed in debug builds
+         only: release builds must use HTTPS. -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

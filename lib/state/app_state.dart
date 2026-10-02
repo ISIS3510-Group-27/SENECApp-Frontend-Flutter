@@ -16,10 +16,15 @@ import '../data/repositories/rso_repository.dart';
 ///
 /// State lives in memory, it resets on restart. Persisting later.
 class AppState extends ChangeNotifier {
-  AppState({RsoRepository repository = const RsoRepository()})
-    : _repository = repository,
-      _membershipIds = {...RsoRepository.seedMembershipIds},
-      _readNotificationIds = {...RsoRepository.seedReadNotificationIds};
+  AppState({
+    required this.student,
+    RsoRepository repository = const RsoRepository(),
+  }) : _repository = repository,
+       _membershipIds = {...RsoRepository.seedMembershipIds},
+       _readNotificationIds = {...RsoRepository.seedReadNotificationIds};
+
+  /// The signed-in student, from the backend's `GET /me`.
+  final StudentProfile student;
 
   final RsoRepository _repository;
   final Set<int> _membershipIds;
@@ -27,8 +32,6 @@ class AppState extends ChangeNotifier {
   final Set<int> _likedIds = {};
 
   // --- Catalogue passthrough ----------------------------------------------
-
-  StudentProfile get student => _repository.currentStudent();
 
   List<Rso> get featured => _repository.featured();
 

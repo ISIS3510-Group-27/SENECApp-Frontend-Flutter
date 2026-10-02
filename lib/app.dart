@@ -1,28 +1,68 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'app_services.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/phone_frame.dart';
+import 'features/auth/session_status_screens.dart';
+import 'features/auth/sign_in_screen.dart';
+import 'features/auth/verify_email_screen.dart';
 import 'features/shell/home_shell.dart';
 import 'state/app_state.dart';
+import 'state/session_controller.dart';
 
-/// Wires the shared state and theme around the navigation shell.
+/// Wires the services, session and theme around the navigation shell.
 class SenecApp extends StatelessWidget {
-  const SenecApp({super.key});
+  const SenecApp({super.key, required this.services});
+
+  final AppServices services;
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AppState(),
+    return MultiProvider(
+      providers: [
+        Provider.value(value: services),
+        ChangeNotifierProvider(
+          create: (_) => SessionController(
+            auth: services.auth,
+            me: services.me,
+            api: services.api,
+          )..start(),
+        ),
+      ],
       child: MaterialApp(
         title: 'SENECApp',
         debugShowCheckedModeBanner: false,
         // The palette is built for a dark canvas, so the app pins itself there
         // rather than following the system setting.
         theme: AppTheme.dark,
-        home: const HomeShell(),
+        home: const _SessionGate(),
         builder: (context, child) => PhoneFrame(child: child!),
       ),
     );
+  }
+}
+
+/// Shows sign-in until there is a student, then the app.
+class _SessionGate extends StatelessWidget {
+  const _SessionGate();
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.watch<SessionController>();
+
+    return switch (session.status) {
+      SessionStatus.starting ||
+      SessionStatus.loadingProfile => const SplashScreen(),
+      SessionStatus.signedOut => const SignInScreen(),
+      SessionStatus.unverified => const VerifyEmailScreen(),
+      SessionStatus.profileFailed => const ProfileLoadFailedScreen(),
+      SessionStatus.signedIn => ChangeNotifierProvider(
+        // A different student gets a fresh state, never the previous one's.
+        key: ValueKey(session.student!.id),
+        create: (_) => AppState(student: session.student!),
+        child: const HomeShell(),
+      ),
+    };
   }
 }
