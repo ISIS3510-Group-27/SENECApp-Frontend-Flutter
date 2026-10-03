@@ -18,6 +18,8 @@ import '../event_detail/event_detail_screen.dart';
 import '../free_now/free_now_screen.dart';
 import '../shell/home_shell.dart';
 import '../shell/track_screen.dart';
+import 'event_filters.dart';
+import 'event_itinerary_screen.dart';
 
 /// Every upcoming event, filterable down to the student's own
 ///  organizations.
@@ -33,6 +35,9 @@ class EventsScreen extends StatefulWidget {
 
 class _EventsScreenState extends State<EventsScreen> {
   bool _joinedOnly = false;
+  bool _savedOnly = false;
+  EventDateFilter _dateFilter = EventDateFilter.any;
+  final _searchController = TextEditingController();
 
   /// Each list is fetched the first time it is shown, then kept.
   final Map<bool, List<CampusEvent>> _events = {};
@@ -51,6 +56,7 @@ class _EventsScreenState extends State<EventsScreen> {
   @override
   void dispose() {
     _appState.removeListener(_onAppStateChanged);
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -86,8 +92,83 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 
   void _select({required bool joinedOnly}) {
-    setState(() => _joinedOnly = joinedOnly);
+    setState(() {
+      _joinedOnly = joinedOnly;
+      _savedOnly = false;
+    });
     if (!_events.containsKey(joinedOnly)) _load(joinedOnly: joinedOnly);
+  }
+
+  void _showSaved() {
+    setState(() {
+      _savedOnly = true;
+      _joinedOnly = false;
+    });
+    if (!_events.containsKey(false)) _load(joinedOnly: false);
+  }
+
+  Future<void> _editSearch() async {
+    final controller = TextEditingController(text: _searchController.text);
+    final query = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.hero),
+        ),
+      ),
+      builder: (context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          kPageGutter,
+          20,
+          kPageGutter,
+          MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Search events', style: AppTheme.heading(size: 20)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              style: AppTheme.body(size: 14),
+              textInputAction: TextInputAction.search,
+              decoration: const InputDecoration(
+                hintText: 'Title, organization or place',
+                prefixIcon: Icon(Icons.search_rounded),
+              ),
+              onSubmitted: (value) => Navigator.of(context).pop(value),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(''),
+                    child: const Text('Clear'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(context).pop(controller.text),
+                    child: const Text('Apply'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (query == null) return;
+    _searchController.text = query;
+    setState(() {});
   }
 
   @override
@@ -101,11 +182,30 @@ class _EventsScreenState extends State<EventsScreen> {
   Widget _buildScreen(BuildContext context) {
     final events = _events[_joinedOnly];
     final error = _errors[_joinedOnly];
+    final appState = context.watch<AppState>();
+    final allEvents = _events[false] ?? events ?? const <CampusEvent>[];
+    final visibleEvents = events == null
+        ? null
+        : filterEvents(
+            events: _savedOnly
+                ? allEvents
+                      .where((event) => appState.isEventSaved(event.id))
+                      .toList()
+                : events,
+            query: _searchController.text,
+            dateFilter: _dateFilter,
+            now: widget.clock(),
+          );
+    final hasFilters =
+        _searchController.text.trim().isNotEmpty ||
+        _dateFilter != EventDateFilter.any ||
+        _savedOnly;
 
     return RefreshIndicator(
       onRefresh: () => _load(joinedOnly: _joinedOnly),
       color: AppColors.accent,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: kNavBarClearance),
         children: [
           Padding(
@@ -135,6 +235,34 @@ class _EventsScreenState extends State<EventsScreen> {
                 // At the venue, straight to the camera without finding the
                 // event first.
                 RoundIconButton(
+                  icon: Icons.search_rounded,
+                  tooltip: 'Search events',
+                  foreground: _searchController.text.trim().isEmpty
+                      ? AppColors.foreground
+                      : AppColors.accent,
+                  onPressed: _editSearch,
+                ),
+                const SizedBox(width: 8),
+                PopupMenuButton<EventDateFilter>(
+                  tooltip: 'Filter by date',
+                  color: AppColors.card,
+                  initialValue: _dateFilter,
+                  onSelected: (filter) => setState(() => _dateFilter = filter),
+                  itemBuilder: (context) => [
+                    for (final filter in EventDateFilter.values)
+                      PopupMenuItem(value: filter, child: Text(filter.label)),
+                  ],
+                  child: RoundIconButton(
+                    icon: Icons.tune_rounded,
+                    tooltip: 'Filter by date',
+                    foreground: _dateFilter == EventDateFilter.any
+                        ? AppColors.foreground
+                        : AppColors.accent,
+                    onPressed: () {},
+                  ),
+                ),
+                const SizedBox(width: 8),
+                RoundIconButton(
                   icon: Icons.qr_code_scanner_rounded,
                   tooltip: 'Scan check-in code',
                   onPressed: _scan,
@@ -157,8 +285,9 @@ class _EventsScreenState extends State<EventsScreen> {
           const SizedBox(height: 20),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
-            child: Row(
+            child: Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: [
                 SelectableChip.filter(
                   label: 'All Events',
@@ -170,9 +299,44 @@ class _EventsScreenState extends State<EventsScreen> {
                   selected: _joinedOnly,
                   onSelected: (_) => _select(joinedOnly: true),
                 ),
+                SelectableChip.filter(
+                  label: 'Saved',
+                  selected: _savedOnly,
+                  onSelected: (_) => _showSaved(),
+                ),
               ],
             ),
           ),
+          if (_searchController.text.trim().isNotEmpty ||
+              _dateFilter != EventDateFilter.any) ...[
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
+              child: _ActiveFilters(
+                query: _searchController.text.trim(),
+                dateFilter: _dateFilter,
+                onClear: () {
+                  _searchController.clear();
+                  setState(() => _dateFilter = EventDateFilter.any);
+                },
+              ),
+            ),
+          ],
+          if (_savedOnly && visibleEvents != null) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.route_rounded),
+                label: const Text('Build itinerary'),
+                onPressed: visibleEvents.isEmpty
+                    ? null
+                    : () => Navigator.of(
+                        context,
+                      ).push(EventItineraryScreen.route(visibleEvents)),
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
           if (error != null)
             ErrorBlock(
@@ -181,10 +345,21 @@ class _EventsScreenState extends State<EventsScreen> {
             )
           else if (events == null)
             const LoadingBlock()
-          else if (events.isEmpty)
-            const _NoJoinedEvents()
+          else if (visibleEvents!.isEmpty)
+            _EmptyEventsState(
+              savedOnly: _savedOnly,
+              joinedOnly: _joinedOnly,
+              hasFilters: hasFilters,
+              onClear: () {
+                _searchController.clear();
+                setState(() {
+                  _dateFilter = EventDateFilter.any;
+                  _savedOnly = false;
+                });
+              },
+            )
           else
-            for (final event in events)
+            for (final event in visibleEvents)
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   kPageGutter,
@@ -194,6 +369,9 @@ class _EventsScreenState extends State<EventsScreen> {
                 ),
                 child: _EventCard(
                   event: event,
+                  saved: appState.isEventSaved(event.id),
+                  saving: appState.savingEvent(event.id),
+                  onSave: () => appState.toggleEventSaved(event.id),
                   onTap: () => Navigator.of(context).push(
                     EventDetailScreen.route(
                       event.id,
@@ -288,9 +466,18 @@ class _WeekBanner extends StatelessWidget {
 }
 
 class _EventCard extends StatelessWidget {
-  const _EventCard({required this.event, required this.onTap});
+  const _EventCard({
+    required this.event,
+    required this.saved,
+    required this.saving,
+    required this.onSave,
+    required this.onTap,
+  });
 
   final CampusEvent event;
+  final bool saved;
+  final bool saving;
+  final VoidCallback onSave;
   final VoidCallback onTap;
 
   @override
@@ -341,14 +528,144 @@ class _EventCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          const Padding(
-            padding: EdgeInsets.only(top: 2),
-            child: Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: AppColors.mutedForeground,
+          Column(
+            children: [
+              IconButton(
+                tooltip: saved ? 'Unsave event' : 'Save event',
+                icon: saving
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        saved
+                            ? Icons.bookmark_rounded
+                            : Icons.bookmark_border_rounded,
+                        color: saved
+                            ? AppColors.accent
+                            : AppColors.mutedForeground,
+                      ),
+                onPressed: saving ? null : onSave,
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: AppColors.mutedForeground,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActiveFilters extends StatelessWidget {
+  const _ActiveFilters({
+    required this.query,
+    required this.dateFilter,
+    required this.onClear,
+  });
+
+  final String query;
+  final EventDateFilter dateFilter;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = [
+      if (query.isNotEmpty) '"$query"',
+      if (dateFilter != EventDateFilter.any) dateFilter.label,
+    ];
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      color: AppColors.secondary,
+      child: Row(
+        children: [
+          const Icon(Icons.filter_alt_rounded, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              parts.join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTheme.body(size: 12, color: AppColors.bodyForeground),
             ),
           ),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onClear,
+            child: const Padding(
+              padding: EdgeInsets.all(2),
+              child: Icon(Icons.close_rounded, size: 16),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyEventsState extends StatelessWidget {
+  const _EmptyEventsState({
+    required this.savedOnly,
+    required this.joinedOnly,
+    required this.hasFilters,
+    required this.onClear,
+  });
+
+  final bool savedOnly;
+  final bool joinedOnly;
+  final bool hasFilters;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final (title, message, icon) = hasFilters
+        ? (
+            'No matching events',
+            'Try a different search or date filter.',
+            Icons.search_off_rounded,
+          )
+        : savedOnly
+        ? (
+            'No saved events yet',
+            'Bookmark events from the list and they will show up here.',
+            Icons.bookmark_border_rounded,
+          )
+        : joinedOnly
+        ? (
+            'Nothing on your calendar',
+            'Join an organization on Discover and its events show up here.',
+            Icons.event_busy_rounded,
+          )
+        : (
+            'No upcoming events',
+            'Check back later for new campus activities.',
+            Icons.event_busy_rounded,
+          );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: kPageGutter,
+        vertical: 40,
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 40, color: AppColors.mutedForeground),
+          const SizedBox(height: 12),
+          Text(title, style: AppTheme.heading(size: 16)),
+          const SizedBox(height: 4),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: AppTheme.body(size: 13, color: AppColors.mutedForeground),
+          ),
+          if (hasFilters) ...[
+            const SizedBox(height: 14),
+            TextButton(onPressed: onClear, child: const Text('Clear filters')),
+          ],
         ],
       ),
     );
@@ -379,38 +696,6 @@ class _MetaLine extends StatelessWidget {
   }
 }
 
-class _NoJoinedEvents extends StatelessWidget {
-  const _NoJoinedEvents();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: kPageGutter,
-        vertical: 40,
-      ),
-      child: Column(
-        children: [
-          const Icon(
-            Icons.event_busy_rounded,
-            size: 40,
-            color: AppColors.mutedForeground,
-          ),
-          const SizedBox(height: 12),
-          Text('Nothing on your calendar', style: AppTheme.heading(size: 16)),
-          const SizedBox(height: 4),
-          Text(
-            'Join an organization on Discover and its events show up here.',
-            textAlign: TextAlign.center,
-            style: AppTheme.body(size: 13, color: AppColors.mutedForeground),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The way into "Free right now": what's on in the gap before the next class.
 class _FreeNowCard extends StatelessWidget {
   const _FreeNowCard();
 

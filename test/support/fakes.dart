@@ -12,6 +12,7 @@ import 'package:senecapp/data/api/client_context.dart';
 import 'package:senecapp/data/auth/auth_service.dart';
 import 'package:senecapp/data/location/location_service.dart';
 import 'package:senecapp/data/push/push_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fake_backend.dart';
 
@@ -131,10 +132,12 @@ AppServices testServices({
   LocationService? location,
   FakeQrCamera? camera,
   PushService? push,
+  SharedPreferences? preferences,
 }) {
   final fakeAuth = auth ?? FakeAuthService();
   return AppServices(
     auth: fakeAuth,
+    preferences: preferences,
     location: location ?? FakeLocationService(),
     qrCamera: (camera ?? FakeQrCamera()).build,
     push: push ?? const DisabledPushService(),

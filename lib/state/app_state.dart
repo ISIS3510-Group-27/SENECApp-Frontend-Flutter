@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/api/api_client.dart';
 import '../data/models/app_notification.dart';
@@ -24,12 +25,14 @@ class AppState extends ChangeNotifier {
     required GroupsRepository groups,
     required EventsRepository events,
     required NotificationsRepository notifications,
+    SharedPreferences? preferences,
     DateTime Function() clock = DateTime.now,
   }) : _student = student,
        _me = me,
        _groups = groups,
        _events = events,
        _notificationsRepo = notifications,
+       _preferences = preferences,
        _clock = clock;
 
   StudentProfile _student;
@@ -41,6 +44,7 @@ class AppState extends ChangeNotifier {
   final GroupsRepository _groups;
   final EventsRepository _events;
   final NotificationsRepository _notificationsRepo;
+  final SharedPreferences? _preferences;
   final DateTime Function() _clock;
 
   /// Fetches everything the shared screens need. Each part fails on its own,
@@ -49,6 +53,7 @@ class AppState extends ChangeNotifier {
     refreshMemberships(),
     refreshNotifications(),
     refreshAttendance(),
+    restoreSavedEvents(),
   ]);
 
   // --- Profile -------------------------------------------------------------
@@ -148,6 +153,54 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       rethrow;
     }
+  }
+
+  // --- Saved events --------------------------------------------------------
+
+  final Set<int> _savedEventIds = {};
+  final Set<int> _savingEventIds = {};
+  bool _savedEventsRestored = false;
+
+  String get _savedEventsKey => 'saved_events.student.${_student.id}';
+
+  List<int> get savedEventIds {
+    final ids = _savedEventIds.toList()..sort();
+    return ids;
+  }
+
+  bool isEventSaved(int eventId) => _savedEventIds.contains(eventId);
+
+  bool savingEvent(int eventId) => _savingEventIds.contains(eventId);
+
+  Future<void> restoreSavedEvents() async {
+    if (_savedEventsRestored) return;
+    _savedEventsRestored = true;
+    final stored = _preferences?.getStringList(_savedEventsKey) ?? const [];
+    _savedEventIds
+      ..clear()
+      ..addAll(stored.map(int.tryParse).whereType<int>());
+    notifyListeners();
+  }
+
+  Future<void> toggleEventSaved(int eventId) async {
+    if (_savingEventIds.contains(eventId)) return;
+    _savingEventIds.add(eventId);
+    notifyListeners();
+
+    final next = {..._savedEventIds};
+    if (!next.add(eventId)) next.remove(eventId);
+
+    final prefs = _preferences;
+    if (prefs != null) {
+      final stored = next.map((id) => id.toString()).toList()..sort();
+      await prefs.setStringList(_savedEventsKey, stored);
+    }
+
+    _savedEventIds
+      ..clear()
+      ..addAll(next);
+    _savingEventIds.remove(eventId);
+    notifyListeners();
   }
 
   // --- Attendance ----------------------------------------------------------

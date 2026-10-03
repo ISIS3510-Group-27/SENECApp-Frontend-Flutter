@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -14,8 +15,10 @@ import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/check_in.dart';
 import '../../data/models/entry_point.dart';
+import '../../data/models/schedule_block.dart';
 import '../../state/app_state.dart';
 import '../check_in/check_in_screen.dart';
+import '../events/event_planning.dart';
 import '../rso_detail/rso_detail_screen.dart';
 import '../shell/track_screen.dart';
 
@@ -64,6 +67,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   /// The venue's QR code, when the student organizes the hosting group.
   CheckInCode? _organizerCode;
+  List<ScheduleBlock>? _conflicts;
 
   @override
   void initState() {
@@ -82,6 +86,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       if (!mounted) return;
       setState(() => _event = event);
       _loadOrganizerCode(event);
+      _loadScheduleConflicts(event);
     } on ApiException catch (e) {
       if (!mounted) return;
       reportError(context, e, screen: Screens.eventDetail);
@@ -116,6 +121,24 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     }
   }
 
+  Future<void> _loadScheduleConflicts(CampusEvent event) async {
+    try {
+      final schedule = await context.read<AppServices>().me.schedule();
+      if (!mounted) return;
+      setState(() => _conflicts = conflictingClasses(event, schedule));
+    } on ApiException {
+      if (mounted) setState(() => _conflicts = const []);
+    }
+  }
+
+  Future<void> _copyDetails(CampusEvent event) async {
+    await Clipboard.setData(ClipboardData(text: eventSummary(event)));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Event details copied')));
+  }
+
   @override
   Widget build(BuildContext context) => TrackScreen(
     name: Screens.eventDetail,
@@ -125,6 +148,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   Widget _buildScreen(BuildContext context) {
     final event = _event ?? widget.preview;
+    final appState = context.watch<AppState>();
 
     return Scaffold(
       body: SafeArea(
@@ -164,6 +188,34 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       ? '$count checked in'
                       : '$count of ${event.capacity} checked in',
                 ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(
+                    child: PrimaryButton.secondary(
+                      label: appState.isEventSaved(event.id)
+                          ? 'Saved'
+                          : 'Save event',
+                      busy: appState.savingEvent(event.id),
+                      onPressed: () => appState.toggleEventSaved(event.id),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  RoundIconButton(
+                    icon: Icons.copy_rounded,
+                    tooltip: 'Copy event details',
+                    size: 54,
+                    iconSize: 20,
+                    onPressed: () => _copyDetails(event),
+                  ),
+                ],
+              ),
+              if (_conflicts case final conflicts?) ...[
+                if (conflicts.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _ClassConflictWarning(conflicts: conflicts),
+                ],
+              ],
               // Check-in needs the full event; the preview may be stale.
               if (_event != null)
                 _CheckInSection(
@@ -322,6 +374,51 @@ class _InfoRow extends StatelessWidget {
             child: Text(
               text,
               style: AppTheme.body(size: 14, color: AppColors.bodyForeground),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClassConflictWarning extends StatelessWidget {
+  const _ClassConflictWarning({required this.conflicts});
+
+  final List<ScheduleBlock> conflicts;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      border: AppColors.orange.withValues(alpha: 0.5),
+      color: AppColors.orange.withValues(alpha: 0.12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: AppColors.orange,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Conflicts with class', style: AppTheme.heading(size: 14)),
+                const SizedBox(height: 4),
+                for (final block in conflicts)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text(
+                      scheduleBlockLabel(block),
+                      style: AppTheme.body(
+                        size: 12,
+                        color: AppColors.bodyForeground,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
