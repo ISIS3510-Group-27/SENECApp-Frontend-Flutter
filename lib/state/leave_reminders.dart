@@ -240,14 +240,10 @@ class LeaveReminders extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> start() async {
     final raw = _preferences?.getString(_key);
-    if (raw != null) {
-      try {
-        for (final item in jsonDecode(raw) as List) {
-          final event = ReminderEvent.fromJson(item as Map<String, dynamic>);
-          if (event.startsAt.isAfter(_clock())) _events[event.id] = event;
-        }
-      } on FormatException {
-      }
+    final saved = raw == null ? null : _decode(raw);
+    for (final item in saved ?? const []) {
+      final event = ReminderEvent.fromJson(item as Map<String, dynamic>);
+      if (event.startsAt.isAfter(_clock())) _events[event.id] = event;
     }
     WidgetsBinding.instance.addObserver(this);
     _observing = true;
@@ -344,6 +340,14 @@ class LeaveReminders extends ChangeNotifier with WidgetsBindingObserver {
       _key,
       jsonEncode([for (final e in _events.values) e.toJson()]),
     );
+  }
+
+  static List<dynamic>? _decode(String raw) {
+    try {
+      return jsonDecode(raw) as List;
+    } on FormatException {
+      return null;
+    }
   }
 
   static Future<List<T>> _orEmpty<T>(Future<List<T>> Function() load) async {

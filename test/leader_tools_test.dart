@@ -121,11 +121,15 @@ void main() {
 
     await tester.tap(find.text('My RSOs').last);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Tennis Uniandes'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Tennis Uniandes'));
     await tester.pumpAndSettle();
 
+    expect(backend.requestsTo('GET', '/groups/1'), hasLength(1));
+
     expect(
-      find.text('You lead this group', skipOffstage: false),
+      find.text('YOU LEAD THIS GROUP', skipOffstage: false),
       findsOneWidget,
     );
     expect(find.text('Create event', skipOffstage: false), findsOneWidget);
