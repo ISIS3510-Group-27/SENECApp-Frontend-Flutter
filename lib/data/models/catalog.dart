@@ -23,12 +23,20 @@ class Interest {
 /// A campus building where groups meet and events happen.
 @immutable
 class Building {
-  const Building({required this.id, required this.code, required this.name});
+  const Building({
+    required this.id,
+    required this.code,
+    required this.name,
+    this.latitude,
+    this.longitude,
+  });
 
   factory Building.fromJson(Map<String, dynamic> json) => Building(
     id: json['id'] as int,
     code: json['code'] as String,
     name: json['name'] as String,
+    latitude: (json['latitude'] as num?)?.toDouble(),
+    longitude: (json['longitude'] as num?)?.toDouble(),
   );
 
   /// What a class in the schedule points to.
@@ -39,4 +47,7 @@ class Building {
 
   /// e.g. `Edificio Mario Laserna`.
   final String name;
+
+  final double? latitude;
+  final double? longitude;
 }

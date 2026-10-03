@@ -64,6 +64,8 @@ class SessionController extends ChangeNotifier {
 
   bool get requiresPassword => _auth.requiresPassword;
 
+  bool get supportsMicrosoft => _auth.supportsMicrosoft;
+
   /// The email being verified, for the "check your inbox" screen.
   String? get pendingEmail => _account?.email;
 
@@ -101,6 +103,9 @@ class SessionController extends ChangeNotifier {
           await _auth.register(email: email, password: password),
         );
       });
+
+  Future<void> signInWithMicrosoft() =>
+      _run(() async => _continueWith(await _auth.signInWithMicrosoft()));
 
   /// Sends the verification email again. Throws [AuthException] on failure.
   Future<void> resendVerification() => _auth.sendEmailVerification();

@@ -63,6 +63,7 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   final _selection = TabSelection();
   final List<StreamSubscription<PushNotification>> _push = [];
+  StreamSubscription<int>? _reminderTaps;
 
   AppTab get _current => _selection.value;
 
@@ -78,13 +79,23 @@ class _HomeShellState extends State<HomeShell> {
     push.launchedFrom().then((notification) {
       if (notification != null && mounted) _openPush(notification);
     });
+    final reminders = context.read<AppServices>().reminders;
+    _reminderTaps = reminders.taps.listen(_openReminder);
+    reminders.launchedFrom().then((eventId) {
+      if (eventId != null && mounted) _openReminder(eventId);
+    });
   }
+
+  void _openReminder(int eventId) => _currentNavigator?.push(
+    EventDetailScreen.route(eventId, entryPoint: EventEntryPoint.reminder),
+  );
 
   @override
   void dispose() {
     for (final subscription in _push) {
       subscription.cancel();
     }
+    _reminderTaps?.cancel();
     _selection.dispose();
     super.dispose();
   }

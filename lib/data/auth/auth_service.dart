@@ -38,11 +38,15 @@ abstract interface class AuthService {
   /// Whether [AuthService.signIn] needs a password.
   bool get requiresPassword;
 
+  bool get supportsMicrosoft;
+
   /// The account restored from the last run, or `null` when signed out.
   /// Called once at launch.
   Future<AuthAccount?> restore();
 
   Future<AuthAccount> signIn({required String email, required String password});
+
+  Future<AuthAccount> signInWithMicrosoft();
 
   /// Creates the account and sends the verification email.
   Future<AuthAccount> register({

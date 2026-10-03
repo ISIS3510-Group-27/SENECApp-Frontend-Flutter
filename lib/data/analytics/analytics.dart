@@ -23,6 +23,7 @@ abstract final class Screens {
   static const notifications = 'notifications';
   static const profile = 'profile';
   static const createGroup = 'create_group';
+  static const createEvent = 'create_event';
 
   // Not in the taxonomy yet; worth adding there.
   static const myGroups = 'my_groups';
@@ -36,7 +37,7 @@ abstract final class Screens {
     joinForm => 'join',
     recommendations => 'recommendations',
     freeNow => 'free_now',
-    events || eventDetail => 'events',
+    events || eventDetail || createEvent => 'events',
     checkInScanner => 'check_in',
     notifications => 'notifications',
     profile || schedule => 'profile',

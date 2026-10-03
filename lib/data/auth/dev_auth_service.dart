@@ -22,6 +22,14 @@ class DevAuthService implements AuthService {
   bool get requiresPassword => false;
 
   @override
+  bool get supportsMicrosoft => false;
+
+  @override
+  Future<AuthAccount> signInWithMicrosoft() async => throw const AuthException(
+    'Microsoft sign-in needs Firebase (AUTH_MODE=firebase).',
+  );
+
+  @override
   Future<AuthAccount?> restore() async {
     _email = _prefs.getString(_emailKey);
     return _account;

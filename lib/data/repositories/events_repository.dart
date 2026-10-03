@@ -34,6 +34,31 @@ class EventsRepository {
     ];
   }
 
+  Future<CampusEvent> create(
+    int groupId, {
+    required String title,
+    required DateTime startsAt,
+    required DateTime endsAt,
+    String? description,
+    int? buildingId,
+    String? locationDetail,
+    int? capacity,
+  }) async => CampusEvent.fromJson(
+    await _api.post(
+          '/groups/$groupId/events',
+          body: {
+            'title': title,
+            'starts_at': startsAt.toUtc().toIso8601String(),
+            'ends_at': endsAt.toUtc().toIso8601String(),
+            'description': ?description,
+            'building_id': ?buildingId,
+            'location_detail': ?locationDetail,
+            'capacity': ?capacity,
+          },
+        )
+        as Map<String, dynamic>,
+  );
+
   /// One event's page. Each call is logged as a view (BQ3), so call it once
   /// per visit, with how the student got there.
   Future<CampusEvent> detail(

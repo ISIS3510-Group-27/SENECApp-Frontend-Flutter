@@ -17,6 +17,7 @@ import '../../data/models/check_in.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/schedule_block.dart';
 import '../../state/app_state.dart';
+import '../../state/leave_reminders.dart';
 import '../check_in/check_in_screen.dart';
 import '../events/event_planning.dart';
 import '../rso_detail/rso_detail_screen.dart';
@@ -216,6 +217,12 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   _ClassConflictWarning(conflicts: conflicts),
                 ],
               ],
+              if (_event case final full?)
+                if (!full.isCancelled && full.startsAt.isAfter(DateTime.now()))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: _LeaveReminderCard(event: full),
+                  ),
               // Check-in needs the full event; the preview may be stale.
               if (_event != null)
                 _CheckInSection(
@@ -541,6 +548,73 @@ class _OrganizerQrSheet extends StatelessWidget {
             style: AppTheme.body(size: 12, color: AppColors.mutedForeground),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LeaveReminderCard extends StatelessWidget {
+  const _LeaveReminderCard({required this.event});
+
+  final CampusEvent event;
+
+  Future<void> _toggle(BuildContext context, bool on) async {
+    final reminders = context.read<LeaveReminders>();
+    final messenger = ScaffoldMessenger.of(context);
+    if (!on) {
+      await reminders.disable(event.id);
+      return;
+    }
+    final plan = await reminders.enable(event);
+    messenger.showSnackBar(SnackBar(content: Text(_explain(plan))));
+  }
+
+  static String _explain(LeavePlan plan) {
+    if (plan.skip == LeaveSkip.inClass) {
+      final title = plan.blockingClass?.title?.trim();
+      final name = title == null || title.isEmpty ? 'a class' : title;
+      return "You're in $name when it starts, so there's no reminder.";
+    }
+    if (plan.skip == LeaveSkip.tooLate) {
+      return plan.walkMinutes == 0
+          ? "It's about to start, and you're right there."
+          : 'Leave now: it is a ${plan.walkMinutes} min walk.';
+    }
+    final from = switch (plan.origin) {
+      LeaveOrigin.here => 'from where you are',
+      LeaveOrigin.previousClass => 'from your previous class',
+      LeaveOrigin.unknown => 'estimated',
+    };
+    final walk = plan.walkMinutes == 0
+        ? 'no walk'
+        : '${plan.walkMinutes} min walk $from';
+    final when = Dates.dayAndTime(plan.notifyAt!);
+    return plan.afterClass
+        ? 'Reminder set for $when, when your class ends ($walk).'
+        : 'Reminder set for $when ($walk).';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reminders = context.watch<LeaveReminders>();
+    final on = reminders.isOn(event.id);
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+      child: SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text(
+          'Leave-time reminder',
+          style: AppTheme.body(size: 14, weight: FontWeight.w700),
+        ),
+        subtitle: Text(
+          'Counts the walk and waits for your class to end',
+          style: AppTheme.body(size: 12, color: AppColors.mutedForeground),
+        ),
+        value: on,
+        activeThumbColor: AppColors.accent,
+        onChanged: reminders.isBusy(event.id)
+            ? null
+            : (value) => _toggle(context, value),
       ),
     );
   }

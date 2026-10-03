@@ -25,6 +25,8 @@ class FakeAuthService implements AuthService {
     this.requiresPassword = false,
     this.supportsRegistration = false,
     this.verifyOnRegister = false,
+    this.supportsMicrosoft = false,
+    this.microsoftEmail = 's.arango@uniandes.edu.co',
   }) : _account = account;
 
   AuthAccount? _account;
@@ -34,6 +36,22 @@ class FakeAuthService implements AuthService {
 
   @override
   final bool supportsRegistration;
+
+  @override
+  final bool supportsMicrosoft;
+
+  final String microsoftEmail;
+
+  int microsoftSignIns = 0;
+
+  @override
+  Future<AuthAccount> signInWithMicrosoft() async {
+    microsoftSignIns++;
+    if (!microsoftEmail.endsWith('@uniandes.edu.co')) {
+      throw const AuthException('Use your @uniandes.edu.co Microsoft account.');
+    }
+    return _account = AuthAccount(email: microsoftEmail, emailVerified: true);
+  }
 
   /// Whether new accounts come back already verified.
   final bool verifyOnRegister;

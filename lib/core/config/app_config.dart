@@ -45,6 +45,11 @@ abstract final class AppConfig {
   /// configured, which `AUTH_MODE=firebase` stands for.
   static bool get firebaseEnabled => authMode == AuthMode.firebase;
 
+  static const microsoftTenant = String.fromEnvironment(
+    'MICROSOFT_TENANT',
+    defaultValue: 'uniandes.edu.co',
+  );
+
   /// The backend only accepts university accounts. Checked here too so a typo
   /// is caught before a round trip.
   static const allowedEmailDomain = 'uniandes.edu.co';
