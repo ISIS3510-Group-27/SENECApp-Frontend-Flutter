@@ -1,0 +1,1 @@
+{"flutter":{"platforms":{"android":{"default":{"projectId":"senecapp","appId":"1:495558992792:android:ffc39a45a88ffaefa941ed","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"senecapp","configurations":{"android":"1:495558992792:android:ffc39a45a88ffaefa941ed","web":"1:495558992792:web:8effb49f5f37a8e7a941ed"}}}}}}
