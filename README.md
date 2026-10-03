@@ -5,10 +5,28 @@ Discover student organizations at Universidad de los Andes. This app talks to th
 
 ## Running
 
+You need:
+
+- Flutter 3.41 or newer (Dart 3.11). Check with `flutter doctor`.
+- Android Studio with an Android emulator (for example a Pixel 8).
+- The backend running at `http://localhost:8000`. See "Getting started" in the backend README.
+
 ```sh
+flutter emulators                       # list emulators
+flutter emulators --launch Pixel_8      # start one (use an ID from the list)
 flutter pub get
-flutter run                     # Android emulator, dev sign-in, backend at http://10.0.2.2:8000
+flutter run                             # dev sign-in, backend at http://10.0.2.2:8000
+flutter run --dart-define=AUTH_MODE=firebase   # Firebase sign-in and push
 ```
+
+Use the sign-in mode that matches the backend's `.env`:
+
+| Backend `.env` | App |
+|---|---|
+| `AUTH_PROVIDER=dev` | `flutter run` |
+| `AUTH_PROVIDER=firebase` | `flutter run --dart-define=AUTH_MODE=firebase` |
+
+If they don't match, the app signs in but then shows "Can't load your profile".
 
 Build settings are passed with `--dart-define`:
 
@@ -16,6 +34,7 @@ Build settings are passed with `--dart-define`:
 |---|---|---|
 | `API_BASE_URL` | `http://10.0.2.2:8000/api/v1` on Android, `http://localhost:8000/api/v1` elsewhere | A physical phone needs the laptop's LAN IP, or a tunnel URL (`cloudflared tunnel --url http://localhost:8000`) on Uniandes Wi-Fi |
 | `AUTH_MODE` | `dev` | `dev` or `firebase` (see below) |
+| `MICROSOFT_TENANT` | `uniandes.edu.co` | See "Sign in with Microsoft" |
 
 ```sh
 flutter run --dart-define=API_BASE_URL=http://192.168.0.10:8000/api/v1
@@ -26,12 +45,14 @@ Debug builds allow plain HTTP to reach the local backend; release builds require
 ## Sign-in
 
 - **`AUTH_MODE=dev`**: any `@uniandes.edu.co` email, no password. The app sends `dev:<email>` as the token, which the backend accepts only with `AUTH_PROVIDER=dev`. **Use demo student** signs in as Sofía Arango, the seeded student.
-- **`AUTH_MODE=firebase`**: Firebase Authentication with email and password. New accounts must click the verification link before the backend lets them in.
+- **`AUTH_MODE=firebase`**: Firebase Authentication with email and password. New accounts must click the verification link before the backend lets them in. Uniandes mail can take several minutes to deliver it, so check spam too.
 
-To enable Firebase:
+The repo already includes the configuration for the team's Firebase project (`senecapp`): `android/app/google-services.json` and `lib/firebase_options.dart`. To use it, set `AUTH_PROVIDER=firebase` and `FIREBASE_PROJECT_ID=senecapp` in the backend's `.env`, then run `flutter run --dart-define=AUTH_MODE=firebase`.
+
+To use a different Firebase project instead:
 
 1. Create a Firebase project and enable **Authentication → Email/Password**.
-2. Run `dart pub global activate flutterfire_cli`, then `flutterfire configure` in this folder (choose Android, package `co.edu.uniandes.senecapp`). It adds `google-services.json` and the Gradle plugin.
+2. Run `dart pub global activate flutterfire_cli`, then `flutterfire configure` in this folder (choose Android, package `co.edu.uniandes.senecapp`). It replaces `google-services.json` and `firebase_options.dart`. If `flutterfire` isn't found, add the pub cache to your PATH (Windows: `%LOCALAPPDATA%\Pub\Cache\bin`, macOS/Linux: `~/.pub-cache/bin`) or run `dart pub global run flutterfire_cli:flutterfire configure`.
 3. In the backend's `.env`: `AUTH_PROVIDER=firebase` and `FIREBASE_PROJECT_ID=<project id>`.
 4. `flutter run --dart-define=AUTH_MODE=firebase`
 
