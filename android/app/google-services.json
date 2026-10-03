@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "495558992792",
+    "project_id": "senecapp",
+    "storage_bucket": "senecapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:495558992792:android:ffc39a45a88ffaefa941ed",
+        "android_client_info": {
+          "package_name": "co.edu.uniandes.senecapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4Xab2k7xAawj1-FBB4HgEBKN3pAL5keA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
