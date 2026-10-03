@@ -26,6 +26,7 @@ class AppServices {
   AppServices({
     required this.auth,
     required this.api,
+    this.preferences,
     this.location = const GeolocatorLocationService(),
     this.qrCamera = mobileScannerCamera,
     Analytics? analytics,
@@ -40,6 +41,7 @@ class AppServices {
 
   final AuthService auth;
   final ApiClient api;
+  final SharedPreferences? preferences;
 
   /// The phone's GPS.
   final LocationService location;
@@ -96,6 +98,7 @@ class AppServices {
     return AppServices(
       auth: auth,
       api: api,
+      preferences: prefs,
       analytics: analytics,
       // Firebase was initialized above, with sign-in.
       push: AppConfig.firebaseEnabled && !kIsWeb

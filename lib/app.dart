@@ -75,6 +75,7 @@ class _SessionGate extends StatelessWidget {
             groups: services.groups,
             events: services.events,
             notifications: services.notifications,
+            preferences: services.preferences,
           )..load();
         },
         child: const HomeShell(),
