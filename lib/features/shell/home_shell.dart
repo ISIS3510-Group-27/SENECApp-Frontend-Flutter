@@ -1,12 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../app_services.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../data/models/entry_point.dart';
+import '../../data/push/push_service.dart';
+import '../../state/app_state.dart';
 import '../create_rso/create_rso_screen.dart';
 import '../discover/discover_screen.dart';
+import '../event_detail/event_detail_screen.dart';
 import '../events/events_screen.dart';
 import '../my_rsos/my_rsos_screen.dart';
+import '../notifications/notifications_screen.dart';
 import '../profile/profile_screen.dart';
+import '../rso_detail/rso_detail_screen.dart';
 
 /// The four top-level destinations.
 ///
@@ -29,6 +40,13 @@ enum AppTab {
   final IconData activeIcon;
 }
 
+/// Which tab is showing. Every tab stays built (so each keeps its scroll
+/// position and filters), so a tab's screen asks this whether the student can
+/// actually see it, e.g. before counting a screen view.
+class TabSelection extends ValueNotifier<AppTab> {
+  TabSelection([super.value = AppTab.discover]);
+}
+
 /// Hosts the bottom navigation bar and one [Navigator] per tab.
 ///
 /// The per-tab navigator is what makes reverse navigation *contextual*: opening
@@ -43,7 +61,72 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  AppTab _current = AppTab.discover;
+  final _selection = TabSelection();
+  final List<StreamSubscription<PushNotification>> _push = [];
+
+  AppTab get _current => _selection.value;
+
+  set _current(AppTab tab) => _selection.value = tab;
+
+  @override
+  void initState() {
+    super.initState();
+    final push = context.read<AppServices>().push;
+    _push
+      ..add(push.taps.listen(_openPush))
+      ..add(push.arrivals.listen(_showArrival));
+    push.launchedFrom().then((notification) {
+      if (notification != null && mounted) _openPush(notification);
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final subscription in _push) {
+      subscription.cancel();
+    }
+    _selection.dispose();
+    super.dispose();
+  }
+
+  /// A push was tapped: record the open (BQ8) and show what it's about, on
+  /// top of whichever tab is showing.
+  void _openPush(PushNotification notification) {
+    if (notification.notificationId case final id?) {
+      context.read<AppState>().openPushed(id);
+    }
+    final route = switch (notification) {
+      PushNotification(:final eventId?) => EventDetailScreen.route(
+        eventId,
+        entryPoint: EventEntryPoint.notification,
+      ),
+      PushNotification(:final groupId?) => RsoDetailScreen.route(
+        groupId,
+        entryPoint: EntryPoint.notification,
+      ),
+      _ => NotificationsScreen.route(),
+    };
+    _currentNavigator?.push(route);
+  }
+
+  /// The system doesn't show pushes while the app is open, so the app does.
+  void _showArrival(PushNotification notification) {
+    context.read<AppState>().refreshNotifications();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          [?notification.title, ?notification.body].join(': '),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        action: SnackBarAction(
+          label: 'Open',
+          textColor: AppColors.accent,
+          onPressed: () => _openPush(notification),
+        ),
+      ),
+    );
+  }
 
   final _navigatorKeys = {
     for (final tab in AppTab.values) tab: GlobalKey<NavigatorState>(),
@@ -79,23 +162,26 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: _handleBack,
-      child: Scaffold(
-        body: SafeArea(
-          bottom: false,
-          child: IndexedStack(
-            index: _current.index,
-            children: [
-              for (final tab in AppTab.values)
-                _TabNavigator(navigatorKey: _navigatorKeys[tab]!, tab: tab),
-            ],
+    return ChangeNotifierProvider.value(
+      value: _selection,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: _handleBack,
+        child: Scaffold(
+          body: SafeArea(
+            bottom: false,
+            child: IndexedStack(
+              index: _current.index,
+              children: [
+                for (final tab in AppTab.values)
+                  _TabNavigator(navigatorKey: _navigatorKeys[tab]!, tab: tab),
+              ],
+            ),
           ),
-        ),
-        bottomNavigationBar: _BottomNav(
-          current: _current,
-          onSelected: _onTabSelected,
+          bottomNavigationBar: _BottomNav(
+            current: _current,
+            onSelected: _onTabSelected,
+          ),
         ),
       ),
     );

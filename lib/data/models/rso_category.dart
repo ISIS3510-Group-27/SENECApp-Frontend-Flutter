@@ -24,4 +24,12 @@ enum RsoCategory {
   /// Categories an organization can actually be filed under.
   static List<RsoCategory> get assignable =>
       values.where((c) => c != RsoCategory.all).toList();
+
+  /// The backend's category slug. The enum names were chosen to match.
+  String get slug => name;
+
+  /// The category for a backend slug. A category added on the backend before
+  /// the app knows it shows under [all] rather than failing.
+  static RsoCategory fromSlug(String slug) =>
+      values.firstWhere((c) => c.slug == slug && c != all, orElse: () => all);
 }

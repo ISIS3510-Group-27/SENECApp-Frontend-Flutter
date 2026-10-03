@@ -4,86 +4,114 @@ import 'package:provider/provider.dart';
 import '../../core/assets/asset_catalog.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/async_states.dart';
 import '../../core/widgets/org_image.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
+import '../../data/models/entry_point.dart';
 import '../../data/models/rso.dart';
 import '../../state/app_state.dart';
 import '../rso_detail/rso_detail_screen.dart';
+import '../shell/home_shell.dart';
+import '../shell/track_screen.dart';
 
 /// The student's own memberships, with a semester summary on top.
 class MyRsosScreen extends StatelessWidget {
   const MyRsosScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final state = context.watch<AppState>();
-    final joined = state.joinedRsos;
+  Widget build(BuildContext context) => TrackScreen(
+    name: Screens.myGroups,
+    tab: AppTab.myRsos,
+    ready: context.select<AppState, bool>(
+      (s) => s.myGroups != null || s.myGroupsError != null,
+    ),
+    child: _buildScreen(context),
+  );
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: kNavBarClearance),
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(kPageGutter, 8, kPageGutter, 0),
-          child: _Header(
-            overline: 'MY ORGANIZATIONS',
-            title: 'My RSOs',
-            mascot: BrandAssets.mascot67,
-          ),
-        ),
-        const SizedBox(height: 20),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
-          child: Row(
-            spacing: 12,
-            children: [
-              Expanded(
-                child: StatTile(
-                  value: '${state.joinedCount}',
-                  label: 'Joined',
-                  color: AppColors.primary,
-                ),
-              ),
-              Expanded(
-                child: StatTile(
-                  value: '${state.eventsAttended}',
-                  label: 'Events attended',
-                  color: AppColors.accent,
-                ),
-              ),
-              Expanded(
-                child: StatTile(
-                  value: state.currentTerm,
-                  label: 'This semester',
-                  color: AppColors.teal,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: kPageGutter),
-          child: SectionLabel(text: 'Active Memberships'),
-        ),
-        const SizedBox(height: 12),
-        if (joined.isEmpty)
-          const _NoMemberships()
-        else
-          for (final rso in joined)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                kPageGutter,
-                0,
-                kPageGutter,
-                12,
-              ),
-              child: _MembershipCard(
-                rso: rso,
-                onTap: () =>
-                    Navigator.of(context).push(RsoDetailScreen.route(rso.id)),
-              ),
+  Widget _buildScreen(BuildContext context) {
+    final state = context.watch<AppState>();
+    final joined = state.myGroups;
+
+    return RefreshIndicator(
+      onRefresh: () =>
+          Future.wait([state.refreshMemberships(), state.refreshAttendance()]),
+      color: AppColors.accent,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: kNavBarClearance),
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(kPageGutter, 8, kPageGutter, 0),
+            child: _Header(
+              overline: 'MY ORGANIZATIONS',
+              title: 'My RSOs',
+              mascot: BrandAssets.mascot67,
             ),
-      ],
+          ),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
+            child: Row(
+              spacing: 12,
+              children: [
+                Expanded(
+                  child: StatTile(
+                    value: '${state.joinedCount}',
+                    label: 'Joined',
+                    color: AppColors.primary,
+                  ),
+                ),
+                Expanded(
+                  child: StatTile(
+                    value: '${state.eventsAttended ?? '–'}',
+                    label: 'Events attended',
+                    color: AppColors.accent,
+                  ),
+                ),
+                Expanded(
+                  child: StatTile(
+                    value: state.currentTerm,
+                    label: 'This semester',
+                    color: AppColors.teal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: kPageGutter),
+            child: SectionLabel(text: 'Active Memberships'),
+          ),
+          const SizedBox(height: 12),
+          if (state.myGroupsError case final error? when joined == null)
+            ErrorBlock(message: error, onRetry: state.refreshMemberships)
+          else if (joined == null)
+            const LoadingBlock()
+          else if (joined.isEmpty)
+            const _NoMemberships()
+          else
+            for (final rso in joined)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  kPageGutter,
+                  0,
+                  kPageGutter,
+                  12,
+                ),
+                child: _MembershipCard(
+                  rso: rso,
+                  onTap: () => Navigator.of(context).push(
+                    RsoDetailScreen.route(
+                      rso.id,
+                      entryPoint: EntryPoint.direct,
+                      preview: rso,
+                    ),
+                  ),
+                ),
+              ),
+        ],
+      ),
     );
   }
 }
@@ -173,12 +201,26 @@ class _MembershipCard extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.background.withValues(alpha: 0.7),
+                      color: switch (rso.reviewStatus) {
+                        ReviewStatus.approved => AppColors.background,
+                        ReviewStatus.pending => AppColors.accent,
+                        ReviewStatus.rejected => AppColors.primary,
+                      }.withValues(alpha: rso.isApproved ? 0.7 : 0.9),
                       borderRadius: BorderRadius.circular(AppRadius.chip),
                     ),
                     child: Text(
-                      'Member',
-                      style: AppTheme.body(size: 10, weight: FontWeight.w800),
+                      switch (rso.reviewStatus) {
+                        ReviewStatus.approved => 'Member',
+                        ReviewStatus.pending => 'Pending review',
+                        ReviewStatus.rejected => 'Not approved',
+                      },
+                      style: AppTheme.body(
+                        size: 10,
+                        weight: FontWeight.w800,
+                        color: rso.reviewStatus == ReviewStatus.pending
+                            ? AppColors.background
+                            : AppColors.foreground,
+                      ),
                     ),
                   ),
                 ),
@@ -202,7 +244,14 @@ class _MembershipCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${rso.members} members',
+                        switch (rso.reviewStatus) {
+                          ReviewStatus.approved => '${rso.members} members',
+                          ReviewStatus.pending => 'Waiting for Student Affairs',
+                          ReviewStatus.rejected =>
+                            rso.rejectionReason ?? 'Not approved',
+                        },
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTheme.body(
                           size: 12,
                           color: AppColors.mutedForeground,

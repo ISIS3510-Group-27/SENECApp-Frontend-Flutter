@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:senecapp/app.dart';
 import 'package:senecapp/core/assets/asset_catalog.dart';
+import 'package:senecapp/core/widgets/rso_list_tile.dart';
 import 'package:senecapp/features/create_rso/create_rso_screen.dart';
+import 'package:senecapp/features/discover/discover_screen.dart';
+
+import 'support/fakes.dart';
 
 void main() {
   setUpAll(() {
@@ -13,28 +16,21 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
   });
 
-  /// Pumps the app at phone size so PhoneFrame steps aside and layouts match
-  /// what a device would show
-  Future<void> pumpApp(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(const SenecApp());
-    await tester.pumpAndSettle();
-  }
+  /// Opens the app with the demo student already signed in.
+  Future<void> pumpSignedIn(WidgetTester tester) =>
+      pumpApp(tester, testServices(auth: signedInAuth()));
 
   testWidgets('opens on Discover with every organization listed', (
     tester,
   ) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     expect(find.text('SENECApp'), findsOneWidget);
     expect(find.text('8 ORGANIZATIONS'), findsOneWidget);
   });
 
   testWidgets('category chip narrows the list', (tester) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     await tester.tap(find.text('Sports'));
     await tester.pumpAndSettle();
@@ -45,9 +41,11 @@ void main() {
   });
 
   testWidgets('search matches on category as well as name', (tester) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     await tester.enterText(find.byType(TextField).first, 'business');
+    // The search goes out once typing pauses.
+    await tester.pump(DiscoverScreen.searchDebounce);
     await tester.pumpAndSettle();
 
     // Emprendedores Uniandes and Finance Society are both Business.
@@ -55,14 +53,16 @@ void main() {
   });
 
   testWidgets('joining an organization updates My RSOs', (tester) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     // Viajeros Uniandes is not one of the seeded memberships.
-    await tester.tap(find.text('Viajeros Uniandes'));
+    await tester.tap(find.widgetWithText(RsoListTile, 'Viajeros Uniandes'));
     await tester.pumpAndSettle();
 
     expect(find.text('Join RSO'), findsOneWidget);
     await tester.tap(find.text('Join RSO'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Join'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Joined'), findsWidgets);
@@ -76,7 +76,7 @@ void main() {
   testWidgets('back from a detail returns to the tab it was opened from', (
     tester,
   ) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     await tester.tap(find.text('Events'));
     await tester.pumpAndSettle();
@@ -84,7 +84,7 @@ void main() {
 
     await tester.tap(find.text('Round Robin Tournament'));
     await tester.pumpAndSettle();
-    expect(find.text('ABOUT'), findsOneWidget);
+    expect(find.text('HOSTED BY'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -93,10 +93,9 @@ void main() {
     expect(find.text('SENECApp Events'), findsOneWidget);
   });
 
-  testWidgets('create form stays disabled until name and category are set', (
-    tester,
-  ) async {
-    await pumpApp(tester);
+  testWidgets('create form stays disabled until name, category and '
+      'description are set', (tester) async {
+    await pumpSignedIn(tester);
 
     await tester.tap(find.text('New RSO'));
     await tester.pumpAndSettle();
@@ -134,6 +133,16 @@ void main() {
     await tester.tap(find.text('Travel'));
     await tester.pumpAndSettle();
 
+    // Still not enough: the backend wants a description of 20+ characters.
+    await tapSubmit();
+    expect(find.text('Proposal Submitted!'), findsNothing);
+
+    await tester.enterText(
+      find.byType(TextField).last,
+      'Weekend surf trips to the Caribbean coast.',
+    );
+    await tester.pumpAndSettle();
+
     await tapSubmit();
     expect(find.text('Proposal Submitted!'), findsOneWidget);
   });
@@ -156,7 +165,7 @@ void main() {
   });
 
   testWidgets('notifications can all be marked read', (tester) async {
-    await pumpApp(tester);
+    await pumpSignedIn(tester);
 
     await tester.tap(find.byTooltip('Notifications'));
     await tester.pumpAndSettle();

@@ -1,20 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../app_services.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
+import '../../data/analytics/analytics.dart';
+import '../../data/api/api_client.dart';
+import '../../data/models/catalog.dart';
 import '../../data/models/rso_category.dart';
+import '../../state/app_state.dart';
+import '../shell/track_screen.dart';
 
 /// The proposal form for a new organization.
 ///
-/// Submission is local to this prototype: it swaps the form for a confirmation
-/// rather than calling anything (until we have a backend).
-/// Name and category are the two fields Student.
-/// Affairs needs to triage a proposal, so the button stays disabled until both
-/// are filled.
+/// A proposal is created pending: only the student sees it (in My RSOs)
+/// until Uniandes Student Affairs approves it, and they're notified either
+/// way. Name, category and a description are required; the backend's own
+/// minimums are checked as the student types, so "Submit" only lights up
+/// for a proposal it will accept.
 class CreateRsoScreen extends StatefulWidget {
   const CreateRsoScreen({super.key});
+
+  static const minName = 3;
+  static const minDescription = 20;
+
+  /// The backend takes up to this many interest tags.
+  static const maxTags = 8;
 
   @override
   State<CreateRsoScreen> createState() => _CreateRsoScreenState();
@@ -26,10 +40,29 @@ class _CreateRsoScreenState extends State<CreateRsoScreen> {
   final _descriptionController = TextEditingController();
 
   RsoCategory? _category;
+  final Set<int> _tagIds = {};
+  late final Future<List<Interest>> _interests = context
+      .read<AppServices>()
+      .catalog
+      .interests();
+
+  bool _submitting = false;
+  String? _error;
   bool _submitted = false;
 
+  static final _email = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+  String get _name => _nameController.text.trim();
+  String get _contact => _contactController.text.trim();
+  String get _description => _descriptionController.text.trim();
+
+  bool get _contactValid => _contact.isEmpty || _email.hasMatch(_contact);
+
   bool get _canSubmit =>
-      _nameController.text.trim().isNotEmpty && _category != null;
+      _name.length >= CreateRsoScreen.minName &&
+      _category != null &&
+      _description.length >= CreateRsoScreen.minDescription &&
+      _contactValid;
 
   @override
   void dispose() {
@@ -39,12 +72,56 @@ class _CreateRsoScreenState extends State<CreateRsoScreen> {
     super.dispose();
   }
 
+  void _selectCategory(RsoCategory category) => setState(() {
+    // Interests belong to a category; ones from the previous pick no longer
+    // apply.
+    if (category != _category) _tagIds.clear();
+    _category = category;
+  });
+
+  void _toggleTag(int id) => setState(() {
+    if (!_tagIds.remove(id) && _tagIds.length < CreateRsoScreen.maxTags) {
+      _tagIds.add(id);
+    }
+  });
+
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+    final appState = context.read<AppState>();
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await context.read<AppServices>().groups.create(
+        name: _name,
+        categorySlug: _category!.slug,
+        description: _description,
+        contactEmail: _contact.isEmpty ? null : _contact,
+        tagIds: _tagIds,
+      );
+      if (!mounted) return;
+      setState(() => _submitted = true);
+      // The pending group shows up in My RSOs.
+      appState.refreshMemberships();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      reportError(context, e, screen: Screens.createGroup);
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      TrackScreen(name: Screens.createGroup, child: _buildScreen(context));
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       body: _submitted
           ? _Confirmation(
-              name: _nameController.text.trim(),
+              name: _name,
               onBack: () => Navigator.of(context).pop(),
             )
           : _Form(
@@ -52,13 +129,18 @@ class _CreateRsoScreenState extends State<CreateRsoScreen> {
               contactController: _contactController,
               descriptionController: _descriptionController,
               category: _category,
+              interests: _interests,
+              tagIds: _tagIds,
+              contactValid: _contactValid,
               canSubmit: _canSubmit,
-              onCategoryChanged: (category) =>
-                  setState(() => _category = category),
+              submitting: _submitting,
+              error: _error,
+              onCategoryChanged: _selectCategory,
+              onTagToggled: _toggleTag,
               // Any keystroke can flip the submit button's state, so the whole
               // form rebuilds on change rather than tracking each field.
               onFieldChanged: () => setState(() {}),
-              onSubmit: () => setState(() => _submitted = true),
+              onSubmit: _submit,
             ),
     );
   }
@@ -70,8 +152,14 @@ class _Form extends StatelessWidget {
     required this.contactController,
     required this.descriptionController,
     required this.category,
+    required this.interests,
+    required this.tagIds,
+    required this.contactValid,
     required this.canSubmit,
+    required this.submitting,
+    required this.error,
     required this.onCategoryChanged,
+    required this.onTagToggled,
     required this.onFieldChanged,
     required this.onSubmit,
   });
@@ -80,13 +168,22 @@ class _Form extends StatelessWidget {
   final TextEditingController contactController;
   final TextEditingController descriptionController;
   final RsoCategory? category;
+  final Future<List<Interest>> interests;
+  final Set<int> tagIds;
+  final bool contactValid;
   final bool canSubmit;
+  final bool submitting;
+  final String? error;
   final ValueChanged<RsoCategory> onCategoryChanged;
+  final ValueChanged<int> onTagToggled;
   final VoidCallback onFieldChanged;
   final VoidCallback onSubmit;
 
   @override
   Widget build(BuildContext context) {
+    final nameLength = nameController.text.trim().length;
+    final descriptionLength = descriptionController.text.trim().length;
+
     return ListView(
       padding: const EdgeInsets.only(bottom: kNavBarClearance),
       children: [
@@ -151,13 +248,17 @@ class _Form extends StatelessWidget {
           hint: 'e.g. Surf & Water Sports Club',
           controller: nameController,
           onChanged: onFieldChanged,
+          helper: nameLength > 0 && nameLength < CreateRsoScreen.minName
+              ? 'At least ${CreateRsoScreen.minName} characters'
+              : null,
         ),
         _Field(
-          label: 'Contact Email',
+          label: 'Contact Email (optional)',
           hint: 'your@uniandes.edu.co',
           controller: contactController,
           keyboardType: TextInputType.emailAddress,
           onChanged: onFieldChanged,
+          helper: contactValid ? null : 'Enter a valid email address',
         ),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: kPageGutter),
@@ -180,6 +281,13 @@ class _Form extends StatelessWidget {
             ],
           ),
         ),
+        if (category case final category?)
+          _InterestPicker(
+            category: category,
+            interests: interests,
+            selected: tagIds,
+            onToggled: onTagToggled,
+          ),
         const SizedBox(height: 20),
         _Field(
           label: 'Description',
@@ -189,13 +297,97 @@ class _Form extends StatelessWidget {
           controller: descriptionController,
           maxLines: 4,
           onChanged: onFieldChanged,
+          helper: descriptionLength < CreateRsoScreen.minDescription
+              ? '$descriptionLength/${CreateRsoScreen.minDescription} '
+                    'characters minimum'
+              : null,
         ),
+        if (error case final error?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(kPageGutter, 0, kPageGutter, 12),
+            child: Text(
+              error,
+              style: AppTheme.body(
+                size: 13,
+                weight: FontWeight.w700,
+                color: AppColors.accent,
+              ),
+            ),
+          ),
         const SizedBox(height: 8),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
-          child: _SubmitButton(enabled: canSubmit, onPressed: onSubmit),
+          child: PrimaryButton(
+            label: 'Submit for Review',
+            busy: submitting,
+            onPressed: canSubmit ? onSubmit : null,
+          ),
         ),
       ],
+    );
+  }
+}
+
+/// Optional interest tags, from the chosen category. They decide which
+/// students the group is recommended to; without any, the backend picks some
+/// from the name and description.
+class _InterestPicker extends StatelessWidget {
+  const _InterestPicker({
+    required this.category,
+    required this.interests,
+    required this.selected,
+    required this.onToggled,
+  });
+
+  final RsoCategory category;
+  final Future<List<Interest>> interests;
+  final Set<int> selected;
+  final ValueChanged<int> onToggled;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: interests,
+      builder: (context, snapshot) {
+        final options = [
+          for (final interest in snapshot.data ?? const <Interest>[])
+            if (interest.categorySlug == category.slug) interest,
+        ];
+        // Unavailable or none for this category: the backend still picks
+        // tags, so the form works without them.
+        if (options.isEmpty) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(kPageGutter, 20, kPageGutter, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SectionLabel(text: 'Interests (optional)'),
+              const SizedBox(height: 4),
+              Text(
+                'Helps us suggest your group to the right students.',
+                style: AppTheme.body(
+                  size: 12,
+                  color: AppColors.mutedForeground,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final interest in options)
+                    SelectableChip.choice(
+                      label: interest.name,
+                      selected: selected.contains(interest.id),
+                      onSelected: (_) => onToggled(interest.id),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -208,6 +400,7 @@ class _Field extends StatelessWidget {
     required this.onChanged,
     this.maxLines = 1,
     this.keyboardType,
+    this.helper,
   });
 
   final String label;
@@ -216,6 +409,9 @@ class _Field extends StatelessWidget {
   final VoidCallback onChanged;
   final int maxLines;
   final TextInputType? keyboardType;
+
+  /// What's missing, under the field.
+  final String? helper;
 
   @override
   Widget build(BuildContext context) {
@@ -234,39 +430,14 @@ class _Field extends StatelessWidget {
             onChanged: (_) => onChanged(),
             decoration: InputDecoration(hintText: hint),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SubmitButton extends StatelessWidget {
-  const _SubmitButton({required this.enabled, required this.onPressed});
-
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: enabled ? AppColors.primary : AppColors.secondary,
-      borderRadius: BorderRadius.circular(AppRadius.card),
-      child: InkWell(
-        onTap: enabled ? onPressed : null,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        child: Container(
-          width: double.infinity,
-          height: 54,
-          alignment: Alignment.center,
-          child: Text(
-            'Submit for Review',
-            style: AppTheme.heading(
-              size: 16,
-              weight: FontWeight.w700,
-              color: enabled ? Colors.white : AppColors.mutedForeground,
+          if (helper case final helper?) ...[
+            const SizedBox(height: 6),
+            Text(
+              helper,
+              style: AppTheme.body(size: 12, color: AppColors.mutedForeground),
             ),
-          ),
-        ),
+          ],
+        ],
       ),
     );
   }
@@ -317,9 +488,9 @@ class _Confirmation extends StatelessWidget {
                   ),
                   const TextSpan(
                     text:
-                        ' has been submitted to Uniandes Student Affairs '
-                        'for review. You will receive a response within 5 '
-                        'business days.',
+                        ' has been submitted to Uniandes Student Affairs for '
+                        "review. You'll find it in My RSOs, and we'll notify "
+                        "you when it's reviewed.",
                   ),
                 ],
               ),
