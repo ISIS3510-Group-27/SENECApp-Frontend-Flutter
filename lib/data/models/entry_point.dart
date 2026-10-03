@@ -31,7 +31,9 @@ enum EventEntryPoint {
   groupDetail('group_detail'),
 
   /// A push or inbox notification.
-  notification('notification');
+  notification('notification'),
+
+  reminder('reminder');
 
   const EventEntryPoint(this.value);
 

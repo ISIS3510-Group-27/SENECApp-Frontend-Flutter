@@ -6,8 +6,6 @@ import '../theme/app_colors.dart';
 
 /// An organization's photo, with a graceful stand-in when there isn't one.
 ///
-/// Bundled art wins (it's curated and works offline), then the photo the
-/// backend hosts, then the fallback. The fallback is not a grey box: it is a
 /// gradient in the organization's own colour with its category icon, so an
 /// art-less group still reads as designed rather than as broken. See
 /// `docs/IMAGE_SPEC.md` for how to add the real art.
@@ -23,8 +21,9 @@ class OrgImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fallback = _Fallback(rso: rso, iconSize: iconSize);
+    final uploaded = rso.imageUrl?.contains('firebasestorage') ?? false;
 
-    if (AssetCatalog.orgImage(rso.imageSlug) case final path?) {
+    if (AssetCatalog.orgImage(rso.imageSlug) case final path? when !uploaded) {
       return Image.asset(
         path,
         fit: BoxFit.cover,

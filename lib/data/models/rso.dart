@@ -36,6 +36,7 @@ class Rso {
     this.upcomingEvents = const [],
     this.reviewStatus = ReviewStatus.approved,
     this.rejectionReason,
+    this.myRole,
   });
 
   factory Rso.fromJson(Map<String, dynamic> json) {
@@ -72,6 +73,7 @@ class Rso {
           ReviewStatus.values.asNameMap()[json['review_status']] ??
           ReviewStatus.approved,
       rejectionReason: json['rejection_reason'] as String?,
+      myRole: json['my_role'] as String?,
       upcomingEvents: [
         for (final event in json['upcoming_events'] as List? ?? const [])
           CampusEvent.fromJson(
@@ -112,6 +114,10 @@ class Rso {
   final String? rejectionReason;
 
   bool get isApproved => reviewStatus == ReviewStatus.approved;
+
+  final String? myRole;
+
+  bool get isAdmin => myRole == 'admin';
 
   // --- Profile only ---------------------------------------------------------
 

@@ -9,6 +9,8 @@ import 'features/auth/sign_in_screen.dart';
 import 'features/auth/verify_email_screen.dart';
 import 'features/shell/home_shell.dart';
 import 'state/app_state.dart';
+import 'state/leave_reminders.dart';
+import 'state/outdoor_mode.dart';
 import 'state/push_registration.dart';
 import 'state/session_controller.dart';
 
@@ -36,6 +38,12 @@ class SenecApp extends StatelessWidget {
             ),
           )..start(),
         ),
+        ChangeNotifierProvider(
+          create: (_) => OutdoorMode(
+            sensor: services.ambientLight,
+            preferences: services.preferences,
+          )..start(),
+        ),
       ],
       child: MaterialApp(
         title: 'SENECApp',
@@ -44,7 +52,12 @@ class SenecApp extends StatelessWidget {
         // rather than following the system setting.
         theme: AppTheme.dark,
         home: const _SessionGate(),
-        builder: (context, child) => PhoneFrame(child: child!),
+        builder: (context, child) => PhoneFrame(
+          child: OutdoorView(
+            mode: context.read<OutdoorMode>(),
+            child: child!,
+          ),
+        ),
       ),
     );
   }
@@ -64,20 +77,40 @@ class _SessionGate extends StatelessWidget {
       SessionStatus.signedOut => const SignInScreen(),
       SessionStatus.unverified => const VerifyEmailScreen(),
       SessionStatus.profileFailed => const ProfileLoadFailedScreen(),
-      SessionStatus.signedIn => ChangeNotifierProvider(
+      SessionStatus.signedIn => MultiProvider(
         // A different student gets a fresh state, never the previous one's.
         key: ValueKey(session.student!.id),
-        create: (context) {
-          final services = context.read<AppServices>();
-          return AppState(
-            student: session.student!,
-            me: services.me,
-            groups: services.groups,
-            events: services.events,
-            notifications: services.notifications,
-            preferences: services.preferences,
-          )..load();
-        },
+        providers: [
+          ChangeNotifierProvider(
+            create: (context) {
+              final services = context.read<AppServices>();
+              return AppState(
+                student: session.student!,
+                me: services.me,
+                groups: services.groups,
+                events: services.events,
+                notifications: services.notifications,
+                preferences: services.preferences,
+              )..load();
+            },
+          ),
+          ChangeNotifierProvider(
+            lazy: false,
+            create: (context) {
+              final services = context.read<AppServices>();
+              return LeaveReminders(
+                studentId: session.student!.id,
+                notifications: services.reminders,
+                location: services.location,
+                me: services.me,
+                catalog: services.catalog,
+                locationOptIn: () =>
+                    context.read<AppState>().student.locationOptIn,
+                preferences: services.preferences,
+              )..start();
+            },
+          ),
+        ],
         child: const HomeShell(),
       ),
     };

@@ -12,12 +12,15 @@ import 'data/auth/dev_auth_service.dart';
 import 'data/auth/firebase_auth_service.dart';
 import 'data/location/location_service.dart';
 import 'data/push/push_service.dart';
+import 'data/reminders/reminder_notifications.dart';
 import 'data/repositories/catalog_repository.dart';
 import 'data/repositories/events_repository.dart';
 import 'data/repositories/groups_repository.dart';
 import 'data/repositories/me_repository.dart';
 import 'data/repositories/notifications_repository.dart';
 import 'data/repositories/recommendations_repository.dart';
+import 'data/sensors/ambient_light.dart';
+import 'data/storage/photo_storage.dart';
 
 /// The long-lived objects that talk to the outside world, built once at launch.
 ///
@@ -31,6 +34,9 @@ class AppServices {
     this.qrCamera = mobileScannerCamera,
     Analytics? analytics,
     this.push = const DisabledPushService(),
+    this.ambientLight = const NoAmbientLightSensor(),
+    this.reminders = const DisabledReminderNotifications(),
+    this.photos = const DisabledPhotoStorage(),
   }) : analytics = analytics ?? Analytics(api: api, context: api.context),
        me = MeRepository(api),
        groups = GroupsRepository(api),
@@ -54,6 +60,12 @@ class AppServices {
 
   /// Push notifications; switched off until Firebase is configured.
   final PushService push;
+
+  final AmbientLightSensor ambientLight;
+
+  final ReminderNotifications reminders;
+
+  final PhotoStorage photos;
 
   final MeRepository me;
   final GroupsRepository groups;
@@ -104,6 +116,11 @@ class AppServices {
       push: AppConfig.firebaseEnabled && !kIsWeb
           ? FirebasePushService()
           : const DisabledPushService(),
+      ambientLight: const PlatformAmbientLightSensor(),
+      reminders: platformReminders(),
+      photos: AppConfig.firebaseEnabled && !kIsWeb
+          ? FirebasePhotoStorage()
+          : const DisabledPhotoStorage(),
     );
   }
 }

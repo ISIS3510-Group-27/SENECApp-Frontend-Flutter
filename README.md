@@ -41,6 +41,40 @@ Push (Firebase Cloud Messaging) uses the same Firebase project, so it switches o
 
 The app registers the phone after sign-in and unregisters it on sign-out. Tapping a push opens its event or group. Android 13+ asks the student for permission first.
 
+## Sign in with Microsoft
+
+Only with `AUTH_MODE=firebase`.
+
+1. In Azure (portal.azure.com, App registrations), register an app for "Accounts in this organizational directory only" so only Uniandes accounts get in. Add the redirect URI that Firebase shows in the next step, and create a client secret.
+2. In Firebase, Authentication, Sign-in method, enable **Microsoft** with that app's client ID and secret.
+3. The app sends `tenant=uniandes.edu.co`. To use the tenant ID instead: `--dart-define=MICROSOFT_TENANT=<tenant id>`.
+
+If Firebase marks the Microsoft email as unverified, the app sends the usual verification link once.
+
+## Group photos (Firebase Storage)
+
+Group admins change the cover photo from the group page (camera or gallery). It needs `AUTH_MODE=firebase` and Storage enabled in the Firebase project, with rules like:
+
+```
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /groups/{groupId}/{file} {
+      allow read;
+      allow write: if request.auth != null
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}
+```
+
+## Leader tools, reminders and outdoor mode
+
+- **Create event** (group admins): suggests the times when most members are out of class, weighted by past attendance (`GET /groups/{id}/insights/best-times`), and shows BQ3, the hours and buildings where suggested events get the most interaction (`GET /groups/{id}/insights/audience`).
+- **Leave-time reminder** on an event page: a local notification at the time to leave, counting the walk from where the student is (or from the class before), and waiting for a class to end. Android only.
+- **Outdoor mode** (Profile): the ambient light sensor turns on stronger contrast and bold text in direct sunlight. Android only, read through `MainActivity`.
+
 ## Tests
 
 ```sh

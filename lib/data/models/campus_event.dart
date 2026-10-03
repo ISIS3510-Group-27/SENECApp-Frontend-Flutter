@@ -15,6 +15,8 @@ class CampusEvent {
     required this.endsAt,
     required this.color,
     this.buildingName,
+    this.buildingLatitude,
+    this.buildingLongitude,
     this.locationDetail,
     this.isCancelled = false,
     this.checkedIn = false,
@@ -47,6 +49,8 @@ class CampusEvent {
           hostColor ??
           AppColors.accent,
       buildingName: building?['name'] as String?,
+      buildingLatitude: (building?['latitude'] as num?)?.toDouble(),
+      buildingLongitude: (building?['longitude'] as num?)?.toDouble(),
       locationDetail: json['location_detail'] as String?,
       isCancelled: json['is_cancelled'] as bool? ?? false,
       checkedIn: json['checked_in'] as bool? ?? false,
@@ -69,6 +73,9 @@ class CampusEvent {
 
   /// e.g. `Edificio Mario Laserna`.
   final String? buildingName;
+
+  final double? buildingLatitude;
+  final double? buildingLongitude;
 
   /// Room or spot inside the building, e.g. `Salón 224`.
   final String? locationDetail;
@@ -111,6 +118,8 @@ class CampusEvent {
     endsAt: endsAt,
     color: color,
     buildingName: buildingName,
+    buildingLatitude: buildingLatitude,
+    buildingLongitude: buildingLongitude,
     locationDetail: locationDetail,
     isCancelled: isCancelled,
     checkedIn: checkedIn ?? this.checkedIn,

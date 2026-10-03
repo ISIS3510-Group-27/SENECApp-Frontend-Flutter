@@ -71,6 +71,8 @@ class FakeBackend {
     'is_saved': false,
   };
 
+  static final bestSlot = DateTime.utc(_now.year, _now.month, _now.day + 2, 17);
+
   /// Events the student has checked in to.
   final Set<int> attended = {};
 
@@ -382,7 +384,11 @@ class FakeBackend {
         'upcoming_events': [
           for (final e in events) _eventJson(e.$1, withGroup: false),
         ],
-        'my_role': memberIds.contains(id) ? 'member' : null,
+        'my_role': adminOf.contains(id)
+            ? 'admin'
+            : memberIds.contains(id)
+            ? 'member'
+            : null,
         'created_at': '2026-01-01T00:00:00Z',
       },
     };
@@ -502,6 +508,73 @@ class FakeBackend {
 
       case ('POST', ['groups']):
         return _propose(jsonDecode(request.body) as Map<String, dynamic>);
+
+      case ('GET', ['groups', final id, 'insights', 'best-times']):
+        if (!adminOf.contains(int.parse(id))) {
+          return jsonResponse({'detail': 'Only group admins can do this'}, 403);
+        }
+        return jsonResponse({
+          'members': 4,
+          'members_with_schedule': 3,
+          'past_events': 2,
+          'duration_minutes': int.parse(
+            query['duration_minutes']?.first ?? '120',
+          ),
+          'slots': [
+            {
+              'weekday': bestSlot.weekday - 1,
+              'start_time': '${bestSlot.hour}:00',
+              'end_time': '${bestSlot.hour + 2}:00',
+              'free_members': 3,
+              'free_ratio': 1.0,
+              'attendance_rate': 0.75,
+              'score': 1.0,
+              'next_starts_at': bestSlot.toIso8601String(),
+            },
+          ],
+        });
+
+      case ('GET', ['groups', final id, 'insights', 'audience']):
+        if (!adminOf.contains(int.parse(id))) {
+          return jsonResponse({'detail': 'Only group admins can do this'}, 403);
+        }
+        final cell = {
+          'hour': 12,
+          'building': _building,
+          'impressions': 40,
+          'interactions': 16,
+          'interaction_rate': 0.4,
+        };
+        return jsonResponse({
+          'question': 'For a student with a free block on campus, at what '
+              'times and locations do nearby event recommendations get the '
+              'most interaction?',
+          'answer': 'Free-block suggestions get the most interaction around '
+              '12:00 (40.0%).',
+          'days': 90,
+          'best_time_and_place': [cell],
+          'by_hour': [cell],
+          'by_building': [cell],
+        });
+
+      case ('POST', ['groups', final id, 'events']):
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        final group = _groups.firstWhere((g) => g.$1 == int.parse(id));
+        return jsonResponse({
+          'id': 99,
+          'group_id': group.$1,
+          'title': body['title'],
+          'starts_at': body['starts_at'],
+          'ends_at': body['ends_at'],
+          'building': null,
+          'location_detail': body['location_detail'],
+          'is_cancelled': false,
+          'description': body['description'],
+          'capacity': body['capacity'],
+          'group': {'id': group.$1, 'name': group.$2, 'color': group.$5},
+          'attendee_count': 0,
+          'checked_in': false,
+        }, 201);
 
       case ('GET', ['groups', final id])
           when proposals.containsKey(int.parse(id)):

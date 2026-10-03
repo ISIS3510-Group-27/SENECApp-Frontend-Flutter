@@ -1,6 +1,7 @@
 import '../api/api_client.dart';
 import '../models/entry_point.dart';
 import '../models/group_filters.dart';
+import '../models/leader_insights.dart';
 import '../models/rso.dart';
 
 /// One page of search results plus how many groups match in total.
@@ -92,6 +93,24 @@ class GroupsRepository {
           },
         )
         as Map<String, dynamic>,
+  );
+
+  Future<Rso> updateImage(int id, String imageUrl) async => Rso.fromJson(
+    await _api.patch('/groups/$id', body: {'image_url': imageUrl})
+        as Map<String, dynamic>,
+  );
+
+  Future<BestTimes> bestTimes(int id, {required Duration length}) async =>
+      BestTimes.fromJson(
+        await _api.get(
+              '/groups/$id/insights/best-times',
+              query: {'duration_minutes': length.inMinutes},
+            )
+            as Map<String, dynamic>,
+      );
+
+  Future<Audience> audience(int id) async => Audience.fromJson(
+    await _api.get('/groups/$id/insights/audience') as Map<String, dynamic>,
   );
 
   /// Groups the student is an active member of, most recently joined first.

@@ -10,6 +10,7 @@ import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/student_profile.dart';
 import '../../state/app_state.dart';
+import '../../state/outdoor_mode.dart';
 import '../../state/session_controller.dart';
 import '../schedule/schedule_screen.dart';
 import '../shell/home_shell.dart';
@@ -117,6 +118,8 @@ class ProfileScreen extends StatelessWidget {
                 const _ScheduleRow(),
                 const Divider(),
                 const _LocationRow(),
+                const Divider(),
+                const _OutdoorRow(),
                 const Divider(),
                 for (final (label, subtitle) in _settings) ...[
                   _SettingsRow(label: label, subtitle: subtitle),
@@ -432,6 +435,62 @@ class _LocationRow extends StatelessWidget {
       value: optedIn,
       activeThumbColor: AppColors.accent,
       onChanged: (value) => _set(context, value),
+    );
+  }
+}
+
+class _OutdoorRow extends StatelessWidget {
+  const _OutdoorRow();
+
+  static const _labels = {
+    OutdoorSetting.auto: 'Auto',
+    OutdoorSetting.on: 'On',
+    OutdoorSetting.off: 'Off',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final mode = context.watch<OutdoorMode>();
+    final subtitle = switch (mode.setting) {
+      OutdoorSetting.on => 'Always on: bolder text and stronger contrast',
+      OutdoorSetting.off => 'Off',
+      OutdoorSetting.auto when mode.sensorAvailable == false =>
+        'This phone has no light sensor. Turn it on by hand.',
+      OutdoorSetting.auto when mode.active =>
+        'On now: bright light detected by the light sensor',
+      OutdoorSetting.auto =>
+        'Turns on by itself in direct sunlight (light sensor)',
+    };
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Outdoor mode',
+            style: AppTheme.body(size: 14, weight: FontWeight.w600),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: AppTheme.body(size: 12, color: AppColors.mutedForeground),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final MapEntry(key: setting, value: label)
+                  in _labels.entries)
+                SelectableChip.filter(
+                  label: label,
+                  selected: mode.setting == setting,
+                  onSelected: (_) => mode.setSetting(setting),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

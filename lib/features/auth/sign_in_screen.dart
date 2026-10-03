@@ -73,6 +73,34 @@ class _SignInScreenState extends State<SignInScreen> {
                         'people on campus.',
             ),
             const SizedBox(height: 28),
+            if (session.supportsMicrosoft && !_registering) ...[
+              PrimaryButton.secondary(
+                label: 'Continue with Microsoft',
+                busy: session.busy,
+                onPressed: () {
+                  FocusScope.of(context).unfocus();
+                  context.read<SessionController>().signInWithMicrosoft();
+                },
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      'or with email',
+                      style: AppTheme.body(
+                        size: 12,
+                        color: AppColors.mutedForeground,
+                      ),
+                    ),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
             if (devMode) ...[
               const AuthMessage.info(
                 'Developer sign-in: any @${AppConfig.allowedEmailDomain} '

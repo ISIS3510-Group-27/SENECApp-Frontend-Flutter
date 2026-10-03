@@ -7,6 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
 import '../../core/widgets/badges.dart';
 import '../../core/widgets/org_image.dart';
+import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
@@ -14,7 +15,9 @@ import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/rso.dart';
+import '../../data/storage/photo_storage.dart';
 import '../../state/app_state.dart';
+import '../create_event/create_event_screen.dart';
 import '../event_detail/event_detail_screen.dart';
 import '../shell/track_screen.dart';
 import 'join_form_sheet.dart';
@@ -180,6 +183,15 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
                         const LoadingBlock(),
                     ] else ...[
                       _InfoSection(rso: detail),
+                      if (detail.isAdmin) ...[
+                        const SizedBox(height: 20),
+                        _LeaderTools(
+                          rso: detail,
+                          onUpdated: (updated) =>
+                              setState(() => _detail = updated),
+                          onEventCreated: _load,
+                        ),
+                      ],
                       if (detail.upcomingEvents.isNotEmpty) ...[
                         const SizedBox(height: 20),
                         SectionLabel(text: 'Upcoming Events'),
@@ -667,6 +679,117 @@ class _ReviewBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _LeaderTools extends StatefulWidget {
+  const _LeaderTools({
+    required this.rso,
+    required this.onUpdated,
+    required this.onEventCreated,
+  });
+
+  final Rso rso;
+  final ValueChanged<Rso> onUpdated;
+  final VoidCallback onEventCreated;
+
+  @override
+  State<_LeaderTools> createState() => _LeaderToolsState();
+}
+
+class _LeaderToolsState extends State<_LeaderTools> {
+  bool _uploading = false;
+
+  Future<void> _createEvent() async {
+    final created = await Navigator.of(
+      context,
+    ).push(CreateEventScreen.route(widget.rso));
+    if (created != null && mounted) widget.onEventCreated();
+  }
+
+  Future<void> _changePhoto() async {
+    final services = context.read<AppServices>();
+    final messenger = ScaffoldMessenger.of(context);
+    final photos = services.photos;
+    if (!photos.enabled) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Photo uploads need Firebase (AUTH_MODE=firebase).'),
+        ),
+      );
+      return;
+    }
+    final source = await showModalBottomSheet<PhotoSource>(
+      context: context,
+      backgroundColor: AppColors.background,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(
+                Icons.photo_camera_rounded,
+                color: AppColors.accent,
+              ),
+              title: Text('Take a photo', style: AppTheme.body(size: 14)),
+              onTap: () => Navigator.of(context).pop(PhotoSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.photo_library_rounded,
+                color: AppColors.accent,
+              ),
+              title: Text(
+                'Choose from gallery',
+                style: AppTheme.body(size: 14),
+              ),
+              onTap: () => Navigator.of(context).pop(PhotoSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    setState(() => _uploading = true);
+    try {
+      final bytes = await photos.pick(source);
+      if (bytes == null) return;
+      final url = await photos.uploadGroupCover(widget.rso.id, bytes);
+      final updated = await services.groups.updateImage(widget.rso.id, url);
+      widget.onUpdated(updated);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Cover photo updated.')),
+      );
+    } on PhotoUploadException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } on ApiException catch (e) {
+      if (mounted) reportError(context, e, screen: Screens.groupDetail);
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionLabel(text: 'You lead this group'),
+        const SizedBox(height: 12),
+        PrimaryButton(
+          label: 'Create event',
+          onPressed: widget.rso.isApproved ? _createEvent : null,
+        ),
+        const SizedBox(height: 10),
+        PrimaryButton.secondary(
+          label: 'Change cover photo',
+          busy: _uploading,
+          onPressed: _changePhoto,
+        ),
+      ],
     );
   }
 }
