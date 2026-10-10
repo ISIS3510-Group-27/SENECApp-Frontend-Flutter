@@ -127,7 +127,15 @@ abstract final class AppTheme {
         ),
         border: _fieldBorder(AppColors.borderStrong),
         enabledBorder: _fieldBorder(AppColors.borderStrong),
-        focusedBorder: _fieldBorder(AppColors.primary),
+        focusedBorder: _fieldBorder(AppColors.focus),
+        // Red only when a field is actually invalid.
+        errorBorder: _fieldBorder(AppColors.primary),
+        focusedErrorBorder: _fieldBorder(AppColors.primary),
+      ),
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: AppColors.foreground,
+        selectionColor: Color(0x40F0E2E7),
+        selectionHandleColor: AppColors.foreground,
       ),
     );
   }
