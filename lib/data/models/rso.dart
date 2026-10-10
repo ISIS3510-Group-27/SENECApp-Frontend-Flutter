@@ -37,6 +37,8 @@ class Rso {
     this.reviewStatus = ReviewStatus.approved,
     this.rejectionReason,
     this.myRole,
+    this.adminRequestPending = false,
+    this.pendingAdminRequests = 0,
   });
 
   factory Rso.fromJson(Map<String, dynamic> json) {
@@ -74,6 +76,8 @@ class Rso {
           ReviewStatus.approved,
       rejectionReason: json['rejection_reason'] as String?,
       myRole: json['my_role'] as String?,
+      adminRequestPending: json['admin_request_status'] == 'pending',
+      pendingAdminRequests: json['pending_admin_requests'] as int? ?? 0,
       upcomingEvents: [
         for (final event in json['upcoming_events'] as List? ?? const [])
           CampusEvent.fromJson(
@@ -118,6 +122,13 @@ class Rso {
   final String? myRole;
 
   bool get isAdmin => myRole == 'admin';
+
+  /// The student asked to become an admin and the group's admins haven't
+  /// answered yet. Profile only.
+  final bool adminRequestPending;
+
+  /// For admins: members waiting for an answer to their admin request.
+  final int pendingAdminRequests;
 
   // --- Profile only ---------------------------------------------------------
 

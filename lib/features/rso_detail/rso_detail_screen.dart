@@ -20,6 +20,7 @@ import '../../state/app_state.dart';
 import '../create_event/create_event_screen.dart';
 import '../event_detail/event_detail_screen.dart';
 import '../shell/track_screen.dart';
+import 'admin_requests_screen.dart';
 import 'join_form_sheet.dart';
 
 /// Level two of the hierarchy, and the deepest the app goes: from here the
@@ -189,8 +190,11 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
                           rso: detail,
                           onUpdated: (updated) =>
                               setState(() => _detail = updated),
-                          onEventCreated: _load,
+                          onChanged: _load,
                         ),
+                      ] else if (joined && detail.isApproved) ...[
+                        const SizedBox(height: 20),
+                        _AdminAccess(rso: detail, onRequested: _load),
                       ],
                       if (detail.upcomingEvents.isNotEmpty) ...[
                         const SizedBox(height: 20),
@@ -687,12 +691,12 @@ class _LeaderTools extends StatefulWidget {
   const _LeaderTools({
     required this.rso,
     required this.onUpdated,
-    required this.onEventCreated,
+    required this.onChanged,
   });
 
   final Rso rso;
   final ValueChanged<Rso> onUpdated;
-  final VoidCallback onEventCreated;
+  final VoidCallback onChanged;
 
   @override
   State<_LeaderTools> createState() => _LeaderToolsState();
@@ -705,7 +709,7 @@ class _LeaderToolsState extends State<_LeaderTools> {
     final created = await Navigator.of(
       context,
     ).push(CreateEventScreen.route(widget.rso));
-    if (created != null && mounted) widget.onEventCreated();
+    if (created != null && mounted) widget.onChanged();
   }
 
   Future<void> _changePhoto() async {
@@ -789,7 +793,164 @@ class _LeaderToolsState extends State<_LeaderTools> {
           busy: _uploading,
           onPressed: _changePhoto,
         ),
+        const SizedBox(height: 10),
+        PrimaryButton.secondary(
+          label: widget.rso.pendingAdminRequests > 0
+              ? 'Admin requests (${widget.rso.pendingAdminRequests})'
+              : 'Admin requests',
+          onPressed: _openAdminRequests,
+        ),
       ],
+    );
+  }
+
+  Future<void> _openAdminRequests() async {
+    final changed = await Navigator.of(
+      context,
+    ).push(AdminRequestsScreen.route(widget.rso));
+    if ((changed ?? false) && mounted) widget.onChanged();
+  }
+}
+
+/// For members who aren't admins: ask the group's admins to become one.
+class _AdminAccess extends StatefulWidget {
+  const _AdminAccess({required this.rso, required this.onRequested});
+
+  final Rso rso;
+  final VoidCallback onRequested;
+
+  @override
+  State<_AdminAccess> createState() => _AdminAccessState();
+}
+
+class _AdminAccessState extends State<_AdminAccess> {
+  bool _sending = false;
+
+  Future<void> _request() async {
+    final note = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.hero),
+        ),
+      ),
+      builder: (_) => _AdminRequestSheet(rso: widget.rso),
+    );
+    if (note == null || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _sending = true);
+    try {
+      await context.read<AppServices>().groups.requestAdmin(
+        widget.rso.id,
+        note: note.isEmpty ? null : note,
+      );
+      messenger.showSnackBar(
+        const SnackBar(content: Text("Request sent to the group's admins.")),
+      );
+      widget.onRequested();
+    } on ApiException catch (e) {
+      if (mounted) reportError(context, e, screen: Screens.groupDetail);
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.rso.adminRequestPending) {
+      return Row(
+        children: [
+          const Icon(
+            Icons.hourglass_top_rounded,
+            size: 16,
+            color: AppColors.mutedForeground,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "Admin request sent. The group's admins will answer soon.",
+              style: AppTheme.body(size: 13, color: AppColors.mutedForeground),
+            ),
+          ),
+        ],
+      );
+    }
+    return PrimaryButton.secondary(
+      label: 'Request admin access',
+      busy: _sending,
+      onPressed: _request,
+    );
+  }
+}
+
+/// Asks for an optional note; pops with the note ('' for none) or null.
+class _AdminRequestSheet extends StatefulWidget {
+  const _AdminRequestSheet({required this.rso});
+
+  final Rso rso;
+
+  @override
+  State<_AdminRequestSheet> createState() => _AdminRequestSheetState();
+}
+
+class _AdminRequestSheetState extends State<_AdminRequestSheet> {
+  final _note = TextEditingController();
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(kPageGutter, 24, kPageGutter, 16),
+        children: [
+          Text(
+            'Help run ${widget.rso.name}',
+            style: AppTheme.heading(size: 20, height: 1.2),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "The group's admins decide. Admins can create events and manage "
+            'the group.',
+            style: AppTheme.body(size: 13, color: AppColors.mutedForeground),
+          ),
+          const SizedBox(height: 20),
+          const SectionLabel(text: 'A note for the admins (optional)'),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _note,
+            maxLines: 3,
+            maxLength: 300,
+            textCapitalization: TextCapitalization.sentences,
+            style: AppTheme.body(size: 14),
+            decoration: const InputDecoration(
+              hintText: 'How would you like to help?',
+            ),
+          ),
+          const SizedBox(height: 16),
+          PrimaryButton(
+            label: 'Send request',
+            color: widget.rso.color,
+            onPressed: () => Navigator.of(context).pop(_note.text.trim()),
+          ),
+          const SizedBox(height: 10),
+          PrimaryButton.secondary(
+            label: 'Cancel',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
     );
   }
 }
