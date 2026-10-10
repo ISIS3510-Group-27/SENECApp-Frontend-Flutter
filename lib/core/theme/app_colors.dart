@@ -45,6 +45,10 @@ abstract final class AppColors {
   static const border = Color(0x0FFFFFFF); // white @ 6% (as suggested)
   static const borderStrong = Color(0x14FFFFFF); // white @ 8% (as suggested)
 
+  /// Outline of the text field being typed in. Neutral on purpose: red borders
+  /// read as "invalid", so [primary] is kept for real input errors.
+  static const focus = Color(0x80F0E2E7); // foreground @ 50%
+
   // --- Per-organization accents -------------------------------------------
   // Each RSO carries its own color so lists stay scannable (we can create more
   // later I think).

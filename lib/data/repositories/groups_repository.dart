@@ -71,8 +71,9 @@ class GroupsRepository {
     },
   );
 
-  /// Proposes a new group. It starts pending: only the student sees it, as
-  /// its admin, until Student Affairs approves it. Without [tagIds] the
+  /// Proposes a new group. It starts pending: only the student sees it, as a
+  /// member, until Student Affairs approves it (platform admins then assign
+  /// its group admins). Without [tagIds] the
   /// backend picks tags from the name and description.
   /// Throws [ApiException] (409 when the name is taken).
   Future<Rso> create({

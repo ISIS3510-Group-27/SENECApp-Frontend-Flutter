@@ -422,7 +422,7 @@ class _SearchField extends StatelessWidget {
         ),
         border: _border(Colors.transparent),
         enabledBorder: _border(Colors.transparent),
-        focusedBorder: _border(AppColors.primary),
+        focusedBorder: _border(AppColors.focus),
       ),
     );
   }
