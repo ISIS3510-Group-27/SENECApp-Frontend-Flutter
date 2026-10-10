@@ -20,7 +20,12 @@ class FakeBackend {
     this.liveEventId,
     this.adminOf = const {},
     Map<int, Map<String, dynamic>> proposals = const {},
+    Map<int, List<Map<String, dynamic>>> adminRequests = const {},
   }) : me = me is Map ? {...me} : me,
+       adminRequests = {
+         for (final MapEntry(:key, :value) in adminRequests.entries)
+           key: [...value],
+       },
        proposals = {...proposals},
        memberIds = {...memberIds},
        schedule = [
@@ -41,6 +46,33 @@ class FakeBackend {
 
   /// Groups the student is an admin of: they get the check-in QR codes.
   final Set<int> adminOf;
+
+  /// Open requests from other members to become admin, by group (what an
+  /// admin of that group sees).
+  final Map<int, List<Map<String, dynamic>>> adminRequests;
+
+  /// Groups where the student asked to become admin and is waiting.
+  final Set<int> requestedAdmin = {};
+
+  /// An admin request as the backend returns it.
+  static Map<String, dynamic> adminRequest({
+    required int id,
+    required int groupId,
+    String name = 'Mateo Rojas',
+    String? note,
+  }) => {
+    'id': id,
+    'group_id': groupId,
+    'requester': {
+      'id': 100 + id,
+      'full_name': name,
+      'email': 'm.rojas@uniandes.edu.co',
+    },
+    'note': note,
+    'status': 'pending',
+    'created_at': '2026-10-01T15:00:00Z',
+    'decided_at': null,
+  };
 
   /// Groups the student proposed, by id: only they see them. Each is also
   /// one of [memberIds] (the creator is the admin).
@@ -389,6 +421,10 @@ class FakeBackend {
             : memberIds.contains(id)
             ? 'member'
             : null,
+        'admin_request_status': requestedAdmin.contains(id) ? 'pending' : null,
+        'pending_admin_requests': adminOf.contains(id)
+            ? adminRequests[id]?.length ?? 0
+            : null,
         'created_at': '2026-01-01T00:00:00Z',
       },
     };
@@ -546,10 +582,12 @@ class FakeBackend {
           'interaction_rate': 0.4,
         };
         return jsonResponse({
-          'question': 'For a student with a free block on campus, at what '
+          'question':
+              'For a student with a free block on campus, at what '
               'times and locations do nearby event recommendations get the '
               'most interaction?',
-          'answer': 'Free-block suggestions get the most interaction around '
+          'answer':
+              'Free-block suggestions get the most interaction around '
               '12:00 (40.0%).',
           'days': 90,
           'best_time_and_place': [cell],
@@ -600,6 +638,38 @@ class FakeBackend {
       case ('DELETE', ['groups', final id, 'save']):
         savedIds.remove(int.parse(id));
         return http.Response('', 204);
+
+      case ('POST', ['groups', final id, 'admin-requests']):
+        final groupId = int.parse(id);
+        if (!requestedAdmin.add(groupId)) {
+          return jsonResponse({'detail': 'You already asked'}, 409);
+        }
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        return jsonResponse(
+          adminRequest(id: 900 + groupId, groupId: groupId, note: body['note']),
+          201,
+        );
+
+      case ('GET', ['groups', final id, 'admin-requests']):
+        if (!adminOf.contains(int.parse(id))) {
+          return jsonResponse({'detail': 'Only group admins can do this'}, 403);
+        }
+        return jsonResponse(adminRequests[int.parse(id)] ?? const []);
+
+      case (
+        'POST',
+        ['groups', final id, 'admin-requests', final rid, final action],
+      ):
+        final pending = adminRequests[int.parse(id)] ?? [];
+        final index = pending.indexWhere((r) => r['id'] == int.parse(rid));
+        if (index < 0) {
+          return jsonResponse({'detail': 'Request not found'}, 404);
+        }
+        final decided = {
+          ...pending.removeAt(index),
+          'status': action == 'approve' ? 'approved' : 'rejected',
+        };
+        return jsonResponse(decided);
 
       case ('POST', ['groups', final id, 'join']):
         memberIds.add(int.parse(id));

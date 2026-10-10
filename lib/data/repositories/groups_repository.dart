@@ -1,4 +1,5 @@
 import '../api/api_client.dart';
+import '../models/admin_request.dart';
 import '../models/entry_point.dart';
 import '../models/group_filters.dart';
 import '../models/leader_insights.dart';
@@ -112,6 +113,26 @@ class GroupsRepository {
 
   Future<Audience> audience(int id) async => Audience.fromJson(
     await _api.get('/groups/$id/insights/audience') as Map<String, dynamic>,
+  );
+
+  /// Asks the group's admins to make the student an admin too. Throws
+  /// [ApiException] (409 when a request is already open).
+  Future<void> requestAdmin(int id, {String? note}) =>
+      _api.post('/groups/$id/admin-requests', body: {'note': ?note});
+
+  /// Open admin requests, oldest first (group admins only).
+  Future<List<AdminRequest>> adminRequests(int id) async => [
+    for (final item in await _api.get('/groups/$id/admin-requests') as List)
+      AdminRequest.fromJson(item as Map<String, dynamic>),
+  ];
+
+  /// Approves (the member becomes admin) or declines an admin request.
+  Future<void> decideAdminRequest(
+    int groupId,
+    int requestId, {
+    required bool approve,
+  }) => _api.post(
+    '/groups/$groupId/admin-requests/$requestId/${approve ? 'approve' : 'reject'}',
   );
 
   /// Groups the student is an active member of, most recently joined first.

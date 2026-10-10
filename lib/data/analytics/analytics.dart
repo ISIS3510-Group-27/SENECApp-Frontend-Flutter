@@ -28,12 +28,13 @@ abstract final class Screens {
   // Not in the taxonomy yet; worth adding there.
   static const myGroups = 'my_groups';
   static const schedule = 'schedule';
+  static const adminRequests = 'admin_requests';
 
   /// The `feature` an error on [screen] is filed under (BQ1).
   static String featureOf(String? screen) => switch (screen) {
     login => 'auth',
     discover => 'explore',
-    groupDetail => 'group_profile',
+    groupDetail || adminRequests => 'group_profile',
     joinForm => 'join',
     recommendations => 'recommendations',
     freeNow => 'free_now',
