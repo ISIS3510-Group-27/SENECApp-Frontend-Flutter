@@ -210,7 +210,8 @@ class _MembershipCard extends StatelessWidget {
                     ),
                     child: Text(
                       switch (rso.reviewStatus) {
-                        ReviewStatus.approved => 'Member',
+                        ReviewStatus.approved =>
+                          rso.isAdmin ? 'Admin' : 'Member',
                         ReviewStatus.pending => 'Pending review',
                         ReviewStatus.rejected => 'Not approved',
                       },
