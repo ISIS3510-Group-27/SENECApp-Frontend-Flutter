@@ -26,6 +26,7 @@ class EventsRepository {
   static String listKey({required bool mine}) =>
       mine ? 'events:mine' : 'events:all';
   static String detailKey(int id) => 'event:$id';
+  static const attendedKey = 'attended';
 
   /// Events that haven't ended yet, soonest first. [mine] keeps only those of
   /// the student's groups. [startsAfter] reaches back into the past.
@@ -157,7 +158,7 @@ class EventsRepository {
   /// How many events of the student's groups since [since] they checked in
   /// to. Walks every page, since a semester holds more than one.
   Future<int> attendedSince(DateTime since) {
-    const key = 'attended';
+    const key = attendedKey;
     return _cache.networkFirst(
       key,
       fetch: () => _countAttended(since),

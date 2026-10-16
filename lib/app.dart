@@ -9,6 +9,7 @@ import 'features/auth/sign_in_screen.dart';
 import 'features/auth/verify_email_screen.dart';
 import 'features/shell/home_shell.dart';
 import 'state/app_state.dart';
+import 'state/connection_status.dart';
 import 'state/leave_reminders.dart';
 import 'state/outdoor_mode.dart';
 import 'state/push_registration.dart';
@@ -25,6 +26,10 @@ class SenecApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         Provider.value(value: services),
+        ChangeNotifierProvider(
+          create: (_) => ConnectionStatus(services.connectivity)..start(),
+        ),
+        ChangeNotifierProvider.value(value: services.offline.freshness),
         ChangeNotifierProvider(
           create: (_) => SessionController(
             auth: services.auth,

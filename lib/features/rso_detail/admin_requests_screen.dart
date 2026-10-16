@@ -6,6 +6,7 @@ import '../../core/format/dates.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
@@ -58,6 +59,14 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
   }
 
   Future<void> _decide(AdminRequest request, {required bool approve}) async {
+    final online = await ensureOnline(
+      context,
+      title: 'Answering needs a connection',
+      message:
+          '${request.requesterName} is notified of your answer through '
+          "SENECApp. Try again when you're back online.",
+    );
+    if (!online || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _deciding = request.id);
     try {
@@ -157,7 +166,13 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> {
               ),
               const SizedBox(height: 20),
               if (_error case final error?)
-                ErrorBlock(message: error, onRetry: _load)
+                ErrorBlock(
+                  message: error,
+                  onRetry: _load,
+                  offlineMessage:
+                      'Requests are always loaded live, so the list is '
+                      'never out of date. Open it again when you are online.',
+                )
               else if (requests == null)
                 const LoadingBlock()
               else if (requests.isEmpty)

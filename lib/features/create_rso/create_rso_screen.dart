@@ -5,6 +5,7 @@ import '../../app_services.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
@@ -87,6 +88,15 @@ class _CreateRsoScreenState extends State<CreateRsoScreen> {
 
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
+    // Nothing typed is lost: the form stays as it is until it can be sent.
+    final online = await ensureOnline(
+      context,
+      title: 'Proposing needs a connection',
+      message:
+          'Your proposal goes to Student Affairs for review. Everything you '
+          "typed stays here; send it when you're back online.",
+    );
+    if (!online || !mounted) return;
     final appState = context.read<AppState>();
     setState(() {
       _submitting = true;

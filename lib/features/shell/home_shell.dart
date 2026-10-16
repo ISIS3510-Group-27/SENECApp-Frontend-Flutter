@@ -7,9 +7,11 @@ import '../../app_services.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/offline.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/push/push_service.dart';
 import '../../state/app_state.dart';
+import '../../state/connection_status.dart';
 import '../create_rso/create_rso_screen.dart';
 import '../discover/discover_screen.dart';
 import '../event_detail/event_detail_screen.dart';
@@ -64,6 +66,7 @@ class _HomeShellState extends State<HomeShell> {
   final _selection = TabSelection();
   final List<StreamSubscription<PushNotification>> _push = [];
   StreamSubscription<int>? _reminderTaps;
+  StreamSubscription<void>? _reconnected;
 
   AppTab get _current => _selection.value;
 
@@ -79,6 +82,9 @@ class _HomeShellState extends State<HomeShell> {
     push.launchedFrom().then((notification) {
       if (notification != null && mounted) _openPush(notification);
     });
+    _reconnected = context.read<ConnectionStatus?>()?.reconnected.listen(
+      (_) => _onReconnected(),
+    );
     final reminders = context.read<AppServices>().reminders;
     _reminderTaps = reminders.taps.listen(_openReminder);
     reminders.launchedFrom().then((eventId) {
@@ -96,6 +102,7 @@ class _HomeShellState extends State<HomeShell> {
       subscription.cancel();
     }
     _reminderTaps?.cancel();
+    _reconnected?.cancel();
     _selection.dispose();
     super.dispose();
   }
@@ -118,6 +125,20 @@ class _HomeShellState extends State<HomeShell> {
       _ => NotificationsScreen.route(),
     };
     _currentNavigator?.push(route);
+  }
+
+  /// Back online: what several tabs share (memberships, saves, inbox,
+  /// attendance) is fetched again, and analytics queued offline go out. Each
+  /// screen refreshes its own list the same way.
+  void _onReconnected() {
+    context.read<AppState>().load();
+    context.read<AppServices>().analytics.flush();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Back online. Updating your groups and events.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   /// The system doesn't show pushes while the app is open, so the app does.
@@ -181,11 +202,22 @@ class _HomeShellState extends State<HomeShell> {
         child: Scaffold(
           body: SafeArea(
             bottom: false,
-            child: IndexedStack(
-              index: _current.index,
+            child: Column(
               children: [
-                for (final tab in AppTab.values)
-                  _TabNavigator(navigatorKey: _navigatorKeys[tab]!, tab: tab),
+                // Above every tab and every screen pushed in one.
+                const OfflineBanner(),
+                Expanded(
+                  child: IndexedStack(
+                    index: _current.index,
+                    children: [
+                      for (final tab in AppTab.values)
+                        _TabNavigator(
+                          navigatorKey: _navigatorKeys[tab]!,
+                          tab: tab,
+                        ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),

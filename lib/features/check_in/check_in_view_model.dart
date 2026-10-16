@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../data/analytics/analytics.dart';
@@ -21,11 +23,18 @@ class CheckInViewModel extends ChangeNotifier {
     required bool Function() locationOptIn,
     required VoidCallback onCheckedIn,
     required Analytics analytics,
+    bool Function()? isOnline,
+    Stream<void>? reconnected,
   }) : _events = events,
        _location = location,
        _locationOptIn = locationOptIn,
        _onCheckedIn = onCheckedIn,
-       _analytics = analytics;
+       _analytics = analytics,
+       _isOnline = isOnline ?? _alwaysOnline {
+    _reconnected = reconnected?.listen((_) => sendPending());
+  }
+
+  static bool _alwaysOnline() => true;
 
   final CampusEvent? event;
 
@@ -38,7 +47,12 @@ class CheckInViewModel extends ChangeNotifier {
   /// Tells the rest of the app (attendance in `AppState`) about a check-in.
   final VoidCallback _onCheckedIn;
   final Analytics _analytics;
+  final bool Function() _isOnline;
+  StreamSubscription<void>? _reconnected;
   bool _disposed = false;
+
+  /// A scan made without a connection, kept to send once it's back.
+  _Scan? _pending;
 
   bool _submitting = false;
   String? _hint;
@@ -57,8 +71,13 @@ class CheckInViewModel extends ChangeNotifier {
   /// The accepted check-in.
   CheckInResult? get result => _result;
 
+  /// The scan was read but there's no connection to send it: it goes out by
+  /// itself when the connection is back.
+  bool get waitingForConnection => _pending != null;
+
   /// Whether the camera should be scanning.
-  bool get scanning => !_submitting && _result == null && _refusal == null;
+  bool get scanning =>
+      !_submitting && _result == null && _refusal == null && _pending == null;
 
   void onScanned(String raw) {
     if (!scanning) return;
@@ -88,7 +107,9 @@ class CheckInViewModel extends ChangeNotifier {
     notifyListeners();
 
     // The position only goes along with the student's consent. Without it,
-    // the code alone checks them in.
+    // the code alone checks them in. It is read now, at the venue, even when
+    // the scan has to wait for the connection: GPS needs no internet, and by
+    // the time the signal is back the student may have walked away.
     double? latitude;
     double? longitude;
     if (_locationOptIn()) {
@@ -96,19 +117,56 @@ class CheckInViewModel extends ChangeNotifier {
       latitude = fix.latitude;
       longitude = fix.longitude;
     }
+    if (_disposed) return;
+    await _send((
+      eventId: eventId,
+      code: code,
+      latitude: latitude,
+      longitude: longitude,
+    ));
+  }
 
+  /// Sends the scan kept while offline. Runs by itself on reconnection.
+  Future<void> sendPending() async {
+    final scan = _pending;
+    if (scan == null || _submitting || _disposed) return;
+    _submitting = true;
+    notifyListeners();
+    await _send(scan);
+  }
+
+  /// The student gave up on the scan that was waiting.
+  void cancelPending() {
+    _pending = null;
+    notifyListeners();
+  }
+
+  Future<void> _send(_Scan scan) async {
+    if (!_isOnline()) {
+      _pending = scan;
+      _submitting = false;
+      notifyListeners();
+      return;
+    }
     try {
       final result = await _events.checkIn(
-        eventId,
-        code: code,
-        latitude: latitude,
-        longitude: longitude,
+        scan.eventId,
+        code: scan.code,
+        latitude: scan.latitude,
+        longitude: scan.longitude,
       );
       if (_disposed) return;
+      _pending = null;
       _result = result;
       _onCheckedIn();
     } on ApiException catch (e) {
       if (_disposed) return;
+      if (e.isNetworkError) {
+        // The connection dropped on the way: keep the scan for when it's back.
+        _pending = scan;
+        return;
+      }
+      _pending = null;
       // A refusal (wrong code, too early, too far) is the check-in working as
       // intended; only failures to reach the backend are errors.
       final status = e.statusCode;
@@ -133,6 +191,14 @@ class CheckInViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _reconnected?.cancel();
     super.dispose();
   }
 }
+
+typedef _Scan = ({
+  int eventId,
+  String code,
+  double? latitude,
+  double? longitude,
+});

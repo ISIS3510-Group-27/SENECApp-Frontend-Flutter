@@ -15,16 +15,21 @@ class FreeNowViewModel extends ChangeNotifier {
     required LocationService location,
     required AppState appState,
     required Analytics analytics,
+    bool Function()? isOnline,
   }) : _recommendations = recommendations,
        _location = location,
        _appState = appState,
        _analytics = analytics,
+       _isOnline = isOnline ?? _alwaysOnline,
        _askingConsent = !appState.student.locationOptIn;
+
+  static bool _alwaysOnline() => true;
 
   final RecommendationsRepository _recommendations;
   final LocationService _location;
   final AppState _appState;
   final Analytics _analytics;
+  final bool Function() _isOnline;
   bool _disposed = false;
 
   bool _askingConsent;
@@ -32,6 +37,7 @@ class FreeNowViewModel extends ChangeNotifier {
   String? _error;
   bool _loading = false;
   LocationProblem? _locationProblem;
+  bool _needsConnection = false;
 
   /// Asking before using location, until the student answers.
   bool get askingConsent => _askingConsent;
@@ -43,7 +49,12 @@ class FreeNowViewModel extends ChangeNotifier {
   /// Why GPS wasn't used this time, if the student allowed it.
   LocationProblem? get locationProblem => _locationProblem;
 
-  bool get ready => _askingConsent || _result != null || _error != null;
+  /// Suggestions are ranked live (free block, time, position), so there is
+  /// no saved copy: offline, the screen says so instead of loading.
+  bool get needsConnection => _needsConnection;
+
+  bool get ready =>
+      _askingConsent || _result != null || _error != null || _needsConnection;
 
   /// Loads right away unless the student still has to answer the consent
   /// question.
@@ -57,6 +68,12 @@ class FreeNowViewModel extends ChangeNotifier {
   Future<void> load() async {
     final optedIn = _appState.student.locationOptIn;
     _askingConsent = false;
+    _needsConnection = !_isOnline();
+    if (_needsConnection) {
+      // No point reading the GPS for a request that can't be sent.
+      notifyListeners();
+      return;
+    }
     _loading = true;
     _error = null;
     notifyListeners();

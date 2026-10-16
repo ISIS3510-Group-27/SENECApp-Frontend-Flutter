@@ -10,6 +10,7 @@ import 'data/api/client_context.dart';
 import 'data/auth/auth_service.dart';
 import 'data/auth/dev_auth_service.dart';
 import 'data/auth/firebase_auth_service.dart';
+import 'data/connectivity/connectivity_service.dart';
 import 'data/local/local_store.dart';
 import 'data/local/offline_cache.dart';
 import 'data/local/sqlite_local_store.dart';
@@ -41,6 +42,7 @@ class AppServices {
     this.reminders = const DisabledReminderNotifications(),
     this.photos = const DisabledPhotoPicker(),
     LocalStore store = const NoLocalStore(),
+    this.connectivity = const AlwaysConnected(),
   }) : analytics = analytics ?? Analytics(api: api, context: api.context),
        offline = OfflineCache(store: store),
        recommendations = RecommendationsRepository(api);
@@ -67,6 +69,9 @@ class AppServices {
 
   /// Camera and gallery, for group cover photos (uploaded to the backend).
   final PhotoPicker photos;
+
+  /// Whether the phone has a network, and when that changes.
+  final ConnectivityService connectivity;
 
   /// The phone's copy of what the student last saw, used when the backend
   /// can't be reached, and which answers on screen came from it.
@@ -129,6 +134,7 @@ class AppServices {
       photos: DevicePhotoPicker(),
       // No SQLite in the browser; the web build simply has no offline copy.
       store: kIsWeb ? const NoLocalStore() : SqliteLocalStore(),
+      connectivity: PlusConnectivityService(),
     );
   }
 }

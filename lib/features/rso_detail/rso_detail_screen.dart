@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -6,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
 import '../../core/widgets/badges.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/org_image.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/selectable_chip.dart';
@@ -14,9 +17,12 @@ import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/entry_point.dart';
+import '../../data/local/offline_cache.dart';
 import '../../data/models/rso.dart';
+import '../../data/repositories/groups_repository.dart';
 import '../../data/storage/photo_picker.dart';
 import '../../state/app_state.dart';
+import '../../state/connection_status.dart';
 import '../create_event/create_event_screen.dart';
 import '../event_detail/event_detail_screen.dart';
 import '../shell/track_screen.dart';
@@ -81,14 +87,26 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
     );
   }();
 
+  StreamSubscription<void>? _reconnected;
+
   @override
   void initState() {
     super.initState();
     _vm.load();
+    // Back online: a page shown from the phone's copy (or not shown at all)
+    // is fetched live, which also records the view the backend missed.
+    final freshness = context.read<DataFreshness?>();
+    _reconnected = context.read<ConnectionStatus?>()?.reconnected.listen((_) {
+      final saved = freshness?.cachedAt(
+        GroupsRepository.detailKey(widget.rsoId),
+      );
+      if (_vm.detail == null || saved != null) _vm.load();
+    });
   }
 
   @override
   void dispose() {
+    _reconnected?.cancel();
     _vm.dispose();
     super.dispose();
   }
@@ -124,7 +142,13 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
                 ),
               ),
               if (vm.error case final error?)
-                ErrorBlock(message: error, onRetry: vm.load)
+                ErrorBlock(
+                  message: error,
+                  onRetry: vm.load,
+                  offlineMessage:
+                      "This group's page loads the first time you open it "
+                      'online, then stays on this phone.',
+                )
               else
                 const LoadingBlock(),
             ],
@@ -156,6 +180,12 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    SavedCopyNote(
+                      dataKeys: [GroupsRepository.detailKey(rso.id)],
+                      message:
+                          'Joining, saving and leader tools need a connection.',
+                      padding: const EdgeInsets.only(bottom: 16),
+                    ),
                     _StatsRow(rso: rso, members: members, detail: detail),
                     if (!rso.isApproved) ...[
                       const SizedBox(height: 16),
@@ -242,6 +272,14 @@ class _Cover extends StatelessWidget {
   final bool saved;
 
   Future<void> _toggleSave(BuildContext context) async {
+    final online = await ensureOnline(
+      context,
+      title: 'Saving needs a connection',
+      message:
+          'Saved groups are kept on your SENECApp account. Try again when '
+          "you're back online.",
+    );
+    if (!online || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       await context.read<AppState>().toggleSave(rso, source: 'group_detail');
@@ -577,6 +615,15 @@ class _JoinCtaState extends State<_JoinCta> {
   /// Joining goes through the form (BQ7), which reports its own progress and
   /// errors.
   Future<void> _join() async {
+    // Checked before the form opens, so nothing typed into it is lost.
+    final online = await ensureOnline(
+      context,
+      title: 'Joining needs a connection',
+      message:
+          'Your request goes to ${widget.rso.name} through SENECApp. You can '
+          'keep reading its saved page meanwhile.',
+    );
+    if (!online || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     final joined = await JoinFormSheet.show(
       context,
@@ -705,6 +752,14 @@ class _LeaderToolsState extends State<_LeaderTools> {
   }
 
   Future<void> _changePhoto() async {
+    final online = await ensureOnline(
+      context,
+      title: 'Changing the photo needs a connection',
+      message:
+          'The new photo is uploaded to SENECApp for every member to see. '
+          "Try again when you're back online.",
+    );
+    if (!online || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     if (!widget.vm.canPickPhotos) {
       messenger.showSnackBar(
@@ -799,6 +854,14 @@ class _AdminAccess extends StatefulWidget {
 
 class _AdminAccessState extends State<_AdminAccess> {
   Future<void> _request() async {
+    final online = await ensureOnline(
+      context,
+      title: 'Requesting admin access needs a connection',
+      message:
+          "The group's admins receive your request through SENECApp. Try "
+          "again when you're back online.",
+    );
+    if (!online || !mounted) return;
     final note = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,

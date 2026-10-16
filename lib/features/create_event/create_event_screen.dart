@@ -7,6 +7,7 @@ import '../../core/format/dates.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
@@ -168,6 +169,14 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     final startsAt = _startsAt;
     if (!_canPublish || startsAt == null) return;
     FocusScope.of(context).unfocus();
+    final online = await ensureOnline(
+      context,
+      title: 'Publishing needs a connection',
+      message:
+          'Members are notified as soon as the event is published. The form '
+          "keeps everything you filled in; publish it when you're back online.",
+    );
+    if (!online || !mounted) return;
     setState(() {
       _publishing = true;
       _error = null;

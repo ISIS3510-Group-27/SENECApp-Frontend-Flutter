@@ -4,11 +4,13 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/app_notification.dart';
 import '../../data/models/entry_point.dart';
+import '../../data/repositories/notifications_repository.dart';
 import '../../state/app_state.dart';
 import '../event_detail/event_detail_screen.dart';
 import '../rso_detail/rso_detail_screen.dart';
@@ -26,8 +28,14 @@ class NotificationsScreen extends StatelessWidget {
 
   /// Same destination as tapping the push: the event if there is one, else
   /// the group.
+  ///
+  /// Offline the saved page still opens, but the notification stays unread:
+  /// the open is recorded (BQ8) when it's tapped again online, instead of
+  /// flipping to read and back when the request fails.
   void _open(BuildContext context, AppNotification notification) {
-    context.read<AppState>().openNotification(notification);
+    if (isOnline(context, listen: false)) {
+      context.read<AppState>().openNotification(notification);
+    }
     final route = switch (notification) {
       AppNotification(:final eventId?) => EventDetailScreen.route(
         eventId,
@@ -46,6 +54,7 @@ class NotificationsScreen extends StatelessWidget {
     BuildContext context,
     AppNotification notification,
   ) async {
+    if (!await _ensureOnline(context) || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       await context.read<AppState>().dismissNotification(notification);
@@ -56,6 +65,16 @@ class NotificationsScreen extends StatelessWidget {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
+
+  /// Clearing notifications is what BQ8 measures, so it happens on the
+  /// backend; offline it waits instead of looking done and coming back.
+  static Future<bool> _ensureOnline(BuildContext context) => ensureOnline(
+    context,
+    title: 'Clearing needs a connection',
+    message:
+        'SENECApp records which notifications you clear. You can still read '
+        "them all; clear them when you're back online.",
+  );
 
   @override
   Widget build(BuildContext context) => TrackScreen(
@@ -104,7 +123,11 @@ class NotificationsScreen extends StatelessWidget {
                 ),
                 if (unread > 0)
                   _MarkAllReadButton(
-                    onPressed: () => context.read<AppState>().markAllRead(),
+                    onPressed: () async {
+                      if (await _ensureOnline(context) && context.mounted) {
+                        await context.read<AppState>().markAllRead();
+                      }
+                    },
                   ),
                 const SizedBox(width: 8),
                 RoundIconButton(
@@ -127,6 +150,9 @@ class NotificationsScreen extends StatelessWidget {
                     ErrorBlock(
                       message: state.notificationsError!,
                       onRetry: state.refreshNotifications,
+                      offlineMessage:
+                          'Your inbox loads the first time you open it online, '
+                          'then stays on this phone to read anytime.',
                     ),
                   ],
                 ),
@@ -139,10 +165,18 @@ class NotificationsScreen extends StatelessWidget {
                     kPageGutter,
                     kNavBarClearance,
                   ),
-                  itemCount: notifications.length,
+                  itemCount: notifications.length + 1,
                   separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
-                    final notification = notifications[index];
+                    if (index == 0) {
+                      return const SavedCopyNote(
+                        dataKeys: [NotificationsRepository.inboxKey],
+                        message:
+                            'You can read everything here; clearing waits '
+                            "until you're back online.",
+                      );
+                    }
+                    final notification = notifications[index - 1];
                     final card = _NotificationCard(
                       notification: notification,
                       unread: notification.unread,
