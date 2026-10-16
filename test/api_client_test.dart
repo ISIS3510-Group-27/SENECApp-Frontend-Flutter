@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:senecapp/core/config/app_config.dart';
 import 'package:senecapp/data/api/api_client.dart';
 import 'package:senecapp/data/api/client_context.dart';
 
@@ -180,5 +181,58 @@ void main() {
 
       expect(context.sessionId, isNot(first));
     });
+  });
+
+  test('uploads a file as multipart with the token and headers', () async {
+    late http.Request sent;
+    await client((request) async {
+      sent = request;
+      return jsonResponse({});
+    }).upload(
+      '/groups/3/cover',
+      field: 'file',
+      bytes: [1, 2, 3],
+      filename: 'cover.jpg',
+      contentType: 'image/jpeg',
+    );
+
+    final body = String.fromCharCodes(sent.bodyBytes);
+    expect(sent.method, 'POST');
+    expect(sent.url.path, '/api/v1/groups/3/cover');
+    expect(sent.headers['Authorization'], 'Bearer test-token');
+    expect(sent.headers['X-App'], 'flutter');
+    expect(sent.headers['content-type'], startsWith('multipart/form-data'));
+    expect(body, contains('name="file"; filename="cover.jpg"'));
+    expect(body, contains('content-type: image/jpeg'));
+  });
+
+  test('retries an upload once with a fresh token after a 401', () async {
+    var calls = 0;
+    await client((request) async {
+      calls++;
+      return calls == 1 ? jsonResponse({}, 401) : jsonResponse({'ok': true});
+    }).upload(
+      '/groups/3/cover',
+      field: 'file',
+      bytes: [1],
+      filename: 'cover.jpg',
+      contentType: 'image/jpeg',
+    );
+
+    expect(calls, 2);
+    expect(auth.forcedRefreshes, 1);
+  });
+
+  test('uploaded photo paths resolve against the API server', () {
+    expect(
+      AppConfig.resolveImageUrl('/media/groups/1/cover.jpg'),
+      Uri.parse(
+        AppConfig.apiBaseUrl,
+      ).resolve('/media/groups/1/cover.jpg').toString(),
+    );
+    expect(
+      AppConfig.resolveImageUrl('https://picsum.photos/seed/x/600/400'),
+      'https://picsum.photos/seed/x/600/400',
+    );
   });
 }

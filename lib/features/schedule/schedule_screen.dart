@@ -63,7 +63,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ).compareTo(ScheduleBlock.minutesOf(b.start)),
       );
 
-  /// Opens the class sheet to add a class, or to edit [existing].
+  /// Opens the class sheet to add a class, or to edit [existing]. The sheet
+  /// returns one block per day picked.
   Future<void> _edit([ScheduleBlock? existing]) async {
     final others = [...?_blocks]..remove(existing);
     final result = await _ClassSheet.show(
@@ -74,7 +75,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
     if (result == null || !mounted) return;
     setState(() {
-      _blocks = _sorted([...others, result]);
+      _blocks = _sorted([...others, ...result]);
       _dirty = true;
     });
   }
@@ -330,12 +331,12 @@ class _ClassSheet extends StatefulWidget {
 
   final CatalogRepository catalog;
 
-  static Future<ScheduleBlock?> show(
+  static Future<List<ScheduleBlock>?> show(
     BuildContext context, {
     required ScheduleBlock? initial,
     required List<ScheduleBlock> others,
     required CatalogRepository catalog,
-  }) => showModalBottomSheet<ScheduleBlock>(
+  }) => showModalBottomSheet<List<ScheduleBlock>>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
@@ -354,7 +355,9 @@ class _ClassSheet extends StatefulWidget {
 class _ClassSheetState extends State<_ClassSheet> {
   static const _shortDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-  late int _weekday = widget.initial?.weekday ?? 0;
+  /// A class can repeat on several days (e.g. Mon and Wed): one block each.
+  /// A new class starts with none picked; an edited one with its own day.
+  late final Set<int> _weekdays = {?widget.initial?.weekday};
   late TimeOfDay _start =
       widget.initial?.start ?? const TimeOfDay(hour: 8, minute: 30);
   late TimeOfDay _end =
@@ -381,23 +384,38 @@ class _ClassSheetState extends State<_ClassSheet> {
 
   Future<void> _done() async {
     final buildings = await _buildings.catchError((_) => <Building>[]);
-    final block = ScheduleBlock(
-      weekday: _weekday,
-      start: _start,
-      end: _end,
-      title: _title.text.trim().isEmpty ? null : _title.text.trim(),
-      buildingId: _buildingId,
-      buildingName: buildings
-          .where((b) => b.id == _buildingId)
-          .firstOrNull
-          ?.name,
-    );
-    if (ScheduleBlock.minutesOf(_end) <= ScheduleBlock.minutesOf(_start)) {
+    final title = _title.text.trim();
+    final buildingName = buildings
+        .where((b) => b.id == _buildingId)
+        .firstOrNull
+        ?.name;
+    final blocks = [
+      for (final day in _weekdays.toList()..sort())
+        ScheduleBlock(
+          weekday: day,
+          start: _start,
+          end: _end,
+          title: title.isEmpty ? null : title,
+          buildingId: _buildingId,
+          buildingName: buildingName,
+        ),
+    ];
+    final clash = blocks
+        .where((b) => widget.others.any(b.overlaps))
+        .map((b) => ScheduleBlock.weekdayNames[b.weekday])
+        .toList();
+
+    if (blocks.isEmpty) {
+      setState(() => _problem = 'Pick at least one day.');
+    } else if (ScheduleBlock.minutesOf(_end) <=
+        ScheduleBlock.minutesOf(_start)) {
       setState(() => _problem = 'The class has to end after it starts.');
-    } else if (widget.others.any(block.overlaps)) {
-      setState(() => _problem = 'That overlaps another class that day.');
+    } else if (clash.isNotEmpty) {
+      setState(
+        () => _problem = 'That overlaps another class on ${clash.join(', ')}.',
+      );
     } else if (mounted) {
-      Navigator.of(context).pop(block);
+      Navigator.of(context).pop(blocks);
     }
   }
 
@@ -415,7 +433,7 @@ class _ClassSheetState extends State<_ClassSheet> {
             style: AppTheme.heading(size: 20),
           ),
           const SizedBox(height: 16),
-          const SectionLabel(text: 'Day'),
+          const SectionLabel(text: 'Days (one or more)'),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
@@ -424,8 +442,11 @@ class _ClassSheetState extends State<_ClassSheet> {
               for (final (day, label) in _shortDays.indexed)
                 SelectableChip.filter(
                   label: label,
-                  selected: _weekday == day,
-                  onSelected: (_) => setState(() => _weekday = day),
+                  selected: _weekdays.contains(day),
+                  onSelected: (on) => setState(() {
+                    on ? _weekdays.add(day) : _weekdays.remove(day);
+                    _problem = null;
+                  }),
                 ),
             ],
           ),
@@ -489,7 +510,11 @@ class _ClassSheetState extends State<_ClassSheet> {
           ],
           const SizedBox(height: 20),
           PrimaryButton(
-            label: widget.initial == null ? 'Add class' : 'Done',
+            label: widget.initial != null
+                ? 'Done'
+                : _weekdays.length > 1
+                ? 'Add class on ${_weekdays.length} days'
+                : 'Add class',
             onPressed: _done,
           ),
         ],

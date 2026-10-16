@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_services.dart';
@@ -15,7 +16,7 @@ import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/rso.dart';
-import '../../data/storage/photo_storage.dart';
+import '../../data/storage/photo_picker.dart';
 import '../../state/app_state.dart';
 import '../create_event/create_event_screen.dart';
 import '../event_detail/event_detail_screen.dart';
@@ -718,9 +719,7 @@ class _LeaderToolsState extends State<_LeaderTools> {
     final photos = services.photos;
     if (!photos.enabled) {
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Photo uploads need Firebase (AUTH_MODE=firebase).'),
-        ),
+        const SnackBar(content: Text("Photos can't be picked on this device.")),
       );
       return;
     }
@@ -760,14 +759,16 @@ class _LeaderToolsState extends State<_LeaderTools> {
     try {
       final bytes = await photos.pick(source);
       if (bytes == null) return;
-      final url = await photos.uploadGroupCover(widget.rso.id, bytes);
-      final updated = await services.groups.updateImage(widget.rso.id, url);
+      final updated = await services.groups.uploadCover(widget.rso.id, bytes);
       widget.onUpdated(updated);
       messenger.showSnackBar(
         const SnackBar(content: Text('Cover photo updated.')),
       );
-    } on PhotoUploadException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } on PlatformException {
+      // Camera or gallery permission refused, or no camera.
+      messenger.showSnackBar(
+        const SnackBar(content: Text("Couldn't open the camera or gallery.")),
+      );
     } on ApiException catch (e) {
       if (mounted) reportError(context, e, screen: Screens.groupDetail);
       messenger.showSnackBar(SnackBar(content: Text(e.message)));

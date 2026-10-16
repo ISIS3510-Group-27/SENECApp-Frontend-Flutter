@@ -38,6 +38,11 @@ abstract final class AppConfig {
         : 'http://localhost:8000/api/v1';
   }
 
+  /// Photos uploaded to the backend come back as a path (`/media/...`) on the
+  /// API's server; other image URLs are already complete.
+  static String resolveImageUrl(String url) =>
+      url.startsWith('/') ? Uri.parse(apiBaseUrl).resolve(url).toString() : url;
+
   static AuthMode get authMode =>
       _authMode == 'firebase' ? AuthMode.firebase : AuthMode.dev;
 
