@@ -7,11 +7,11 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
-import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/check_in.dart';
 import '../../state/app_state.dart';
 import '../shell/track_screen.dart';
+import 'check_in_view_model.dart';
 
 /// Checks the student in by scanning the event's QR code (the camera) and,
 /// when they allow location, confirming they're near the venue (the GPS).
@@ -36,96 +36,43 @@ class CheckInScreen extends StatefulWidget {
 class _CheckInScreenState extends State<CheckInScreen> {
   final _manualCode = TextEditingController();
 
+  /// Whether the "type the code" field is open (a View-only toggle).
   bool _typing = false;
-  bool _submitting = false;
 
-  /// Shown under the camera when a scan can't be used, e.g. a QR code that
-  /// isn't a SENECApp one. Scanning carries on.
-  String? _hint;
-
-  /// The backend turned the check-in down; scanning stops until "Scan again".
-  String? _refusal;
-
-  CheckInResult? _result;
+  late final CheckInViewModel _vm = () {
+    final services = context.read<AppServices>();
+    return CheckInViewModel(
+      event: widget.event,
+      events: services.events,
+      location: services.location,
+      locationOptIn: () => context.read<AppState>().student.locationOptIn,
+      onCheckedIn: () => context.read<AppState>().refreshAttendance(),
+      analytics: services.analytics,
+    );
+  }();
 
   @override
   void dispose() {
+    _vm.dispose();
     _manualCode.dispose();
     super.dispose();
   }
 
-  void _onScanned(String raw) {
-    if (_submitting || _result != null || _refusal != null) return;
-    final payload = CheckInPayload.tryParse(raw);
-    final expected = widget.event?.id;
-    if (payload == null) {
-      setState(() => _hint = "That isn't a SENECApp check-in code.");
-    } else if (expected != null && payload.eventId != expected) {
-      setState(() => _hint = 'That code is for a different event.');
-    } else {
-      _submit(payload.eventId, payload.code);
-    }
-  }
-
   void _onTyped() {
-    final code = _manualCode.text.trim();
-    if (code.isEmpty) return;
+    if (_manualCode.text.trim().isEmpty) return;
     FocusScope.of(context).unfocus();
-    _submit(widget.event!.id, code);
+    _vm.submitTyped(_manualCode.text);
   }
-
-  Future<void> _submit(int eventId, String code) async {
-    final services = context.read<AppServices>();
-    final appState = context.read<AppState>();
-    setState(() {
-      _submitting = true;
-      _hint = null;
-    });
-
-    // The position only goes along with the student's consent. Without it,
-    // the code alone checks them in.
-    double? latitude;
-    double? longitude;
-    if (appState.student.locationOptIn) {
-      final fix = await services.location.current();
-      latitude = fix.latitude;
-      longitude = fix.longitude;
-    }
-
-    try {
-      final result = await services.events.checkIn(
-        eventId,
-        code: code,
-        latitude: latitude,
-        longitude: longitude,
-      );
-      if (!mounted) return;
-      setState(() => _result = result);
-      appState.refreshAttendance();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      // A refusal (wrong code, too early, too far) is the check-in working as
-      // intended; only failures to reach the backend are errors.
-      final status = e.statusCode;
-      if (status == null || status >= 500) {
-        reportError(context, e, screen: Screens.checkInScanner);
-      }
-      setState(() => _refusal = e.message);
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  void _scanAgain() => setState(() {
-    _refusal = null;
-    _hint = null;
-  });
 
   @override
-  Widget build(BuildContext context) =>
-      TrackScreen(name: Screens.checkInScanner, child: _buildScreen(context));
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _vm,
+    builder: (context, _) =>
+        TrackScreen(name: Screens.checkInScanner, child: _buildScreen(context)),
+  );
 
   Widget _buildScreen(BuildContext context) {
+    final vm = _vm;
     final event = widget.event;
 
     return Scaffold(
@@ -141,7 +88,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
                   tooltip: 'Back',
                   size: 36,
                   iconSize: 17,
-                  onPressed: () => Navigator.of(context).pop(_result),
+                  onPressed: () => Navigator.of(context).pop(vm.result),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -164,31 +111,34 @@ class _CheckInScreenState extends State<CheckInScreen> {
               ],
             ),
             const SizedBox(height: 24),
-            if (_result case final result?)
+            if (vm.result case final result?)
               _Success(
                 result: result,
                 onDone: () => Navigator.of(context).pop(result),
               )
-            else if (_refusal case final refusal?)
-              _Refused(message: refusal, onRetry: _scanAgain)
+            else if (vm.refusal case final refusal?)
+              _Refused(message: refusal, onRetry: vm.scanAgain)
             else ...[
               _Viewfinder(
-                busy: _submitting,
-                camera: _submitting
+                busy: vm.submitting,
+                camera: vm.submitting
                     ? null
-                    : context.read<AppServices>().qrCamera(context, _onScanned),
+                    : context.read<AppServices>().qrCamera(
+                        context,
+                        vm.onScanned,
+                      ),
               ),
               const SizedBox(height: 14),
               Text(
-                _hint ??
+                vm.hint ??
                     'Point your camera at the QR code the organizers '
                         'are showing.',
                 textAlign: TextAlign.center,
                 style: AppTheme.body(
                   size: 13,
                   height: 1.4,
-                  weight: _hint == null ? FontWeight.w400 : FontWeight.w700,
-                  color: _hint == null
+                  weight: vm.hint == null ? FontWeight.w400 : FontWeight.w700,
+                  color: vm.hint == null
                       ? AppColors.bodyForeground
                       : AppColors.accent,
                 ),
@@ -214,7 +164,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
                   const SizedBox(height: 12),
                   PrimaryButton(
                     label: 'Check in',
-                    busy: _submitting,
+                    busy: vm.submitting,
                     onPressed: _onTyped,
                   ),
                 ] else

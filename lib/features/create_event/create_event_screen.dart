@@ -187,7 +187,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Event published. Members were notified.')),
+        const SnackBar(
+          content: Text('Event published. Members were notified.'),
+        ),
       );
       Navigator.of(context).pop(event);
     } on ApiException catch (e) {
@@ -552,7 +554,8 @@ class _AudienceSection extends StatelessWidget {
         final data = snapshot.data!;
         if (data.isEmpty) {
           return const _Note(
-            text: 'Not enough activity on campus yet to tell where students '
+            text:
+                'Not enough activity on campus yet to tell where students '
                 'engage.',
           );
         }

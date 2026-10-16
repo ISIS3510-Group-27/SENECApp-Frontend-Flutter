@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_services.dart';
@@ -23,6 +22,7 @@ import '../event_detail/event_detail_screen.dart';
 import '../shell/track_screen.dart';
 import 'admin_requests_screen.dart';
 import 'join_form_sheet.dart';
+import 'rso_detail_view_model.dart';
 
 /// Level two of the hierarchy, and the deepest the app goes: from here the
 /// student can join, which is the whole point of Discover.
@@ -69,40 +69,43 @@ class RsoDetailScreen extends StatefulWidget {
 }
 
 class _RsoDetailScreenState extends State<RsoDetailScreen> {
-  Rso? _detail;
-  String? _error;
+  late final RsoDetailViewModel _vm = () {
+    final services = context.read<AppServices>();
+    return RsoDetailViewModel(
+      rsoId: widget.rsoId,
+      entryPoint: widget.entryPoint,
+      recRequestId: widget.recRequestId,
+      groups: services.groups,
+      photos: services.photos,
+      analytics: services.analytics,
+    );
+  }();
 
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() => _error = null);
-    try {
-      final detail = await context.read<AppServices>().groups.detail(
-        widget.rsoId,
-        entryPoint: widget.entryPoint,
-        recRequestId: widget.recRequestId,
-      );
-      if (mounted) setState(() => _detail = detail);
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      reportError(context, e, screen: Screens.groupDetail);
-      setState(() => _error = e.message);
-    }
+    _vm.load();
   }
 
   @override
-  Widget build(BuildContext context) => TrackScreen(
-    name: Screens.groupDetail,
-    ready: _detail != null || _error != null,
-    child: _buildScreen(context),
+  void dispose() {
+    _vm.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _vm,
+    builder: (context, _) => TrackScreen(
+      name: Screens.groupDetail,
+      ready: _vm.ready,
+      child: _buildScreen(context),
+    ),
   );
 
   Widget _buildScreen(BuildContext context) {
-    final rso = _detail ?? widget.preview;
+    final vm = _vm;
+    final rso = vm.detail ?? widget.preview;
 
     if (rso == null) {
       return Scaffold(
@@ -120,8 +123,8 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
-              if (_error case final error?)
-                ErrorBlock(message: error, onRetry: _load)
+              if (vm.error case final error?)
+                ErrorBlock(message: error, onRetry: vm.load)
               else
                 const LoadingBlock(),
             ],
@@ -130,7 +133,7 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
       );
     }
 
-    final detail = _detail;
+    final detail = vm.detail;
     final state = context.watch<AppState>();
     final joined = state.isMember(rso);
     // Counts the student straight away when they joined during this visit.
@@ -179,23 +182,18 @@ class _RsoDetailScreenState extends State<RsoDetailScreen> {
                       ],
                     ),
                     if (detail == null) ...[
-                      if (_error case final error?)
-                        ErrorBlock(message: error, onRetry: _load)
+                      if (vm.error case final error?)
+                        ErrorBlock(message: error, onRetry: vm.load)
                       else
                         const LoadingBlock(),
                     ] else ...[
                       _InfoSection(rso: detail),
                       if (detail.isAdmin) ...[
                         const SizedBox(height: 20),
-                        _LeaderTools(
-                          rso: detail,
-                          onUpdated: (updated) =>
-                              setState(() => _detail = updated),
-                          onChanged: _load,
-                        ),
+                        _LeaderTools(rso: detail, vm: vm),
                       ] else if (joined && detail.isApproved) ...[
                         const SizedBox(height: 20),
-                        _AdminAccess(rso: detail, onRequested: _load),
+                        _AdminAccess(rso: detail, vm: vm),
                       ],
                       if (detail.upcomingEvents.isNotEmpty) ...[
                         const SizedBox(height: 20),
@@ -689,35 +687,26 @@ class _ReviewBanner extends StatelessWidget {
 }
 
 class _LeaderTools extends StatefulWidget {
-  const _LeaderTools({
-    required this.rso,
-    required this.onUpdated,
-    required this.onChanged,
-  });
+  const _LeaderTools({required this.rso, required this.vm});
 
   final Rso rso;
-  final ValueChanged<Rso> onUpdated;
-  final VoidCallback onChanged;
+  final RsoDetailViewModel vm;
 
   @override
   State<_LeaderTools> createState() => _LeaderToolsState();
 }
 
 class _LeaderToolsState extends State<_LeaderTools> {
-  bool _uploading = false;
-
   Future<void> _createEvent() async {
     final created = await Navigator.of(
       context,
     ).push(CreateEventScreen.route(widget.rso));
-    if (created != null && mounted) widget.onChanged();
+    if (created != null && mounted) widget.vm.load();
   }
 
   Future<void> _changePhoto() async {
-    final services = context.read<AppServices>();
     final messenger = ScaffoldMessenger.of(context);
-    final photos = services.photos;
-    if (!photos.enabled) {
+    if (!widget.vm.canPickPhotos) {
       messenger.showSnackBar(
         const SnackBar(content: Text("Photos can't be picked on this device.")),
       );
@@ -755,25 +744,9 @@ class _LeaderToolsState extends State<_LeaderTools> {
     );
     if (source == null || !mounted) return;
 
-    setState(() => _uploading = true);
-    try {
-      final bytes = await photos.pick(source);
-      if (bytes == null) return;
-      final updated = await services.groups.uploadCover(widget.rso.id, bytes);
-      widget.onUpdated(updated);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Cover photo updated.')),
-      );
-    } on PlatformException {
-      // Camera or gallery permission refused, or no camera.
-      messenger.showSnackBar(
-        const SnackBar(content: Text("Couldn't open the camera or gallery.")),
-      );
-    } on ApiException catch (e) {
-      if (mounted) reportError(context, e, screen: Screens.groupDetail);
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => _uploading = false);
+    final message = await widget.vm.changeCover(source);
+    if (message != null) {
+      messenger.showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -791,7 +764,7 @@ class _LeaderToolsState extends State<_LeaderTools> {
         const SizedBox(height: 10),
         PrimaryButton.secondary(
           label: 'Change cover photo',
-          busy: _uploading,
+          busy: widget.vm.uploadingCover,
           onPressed: _changePhoto,
         ),
         const SizedBox(height: 10),
@@ -809,24 +782,22 @@ class _LeaderToolsState extends State<_LeaderTools> {
     final changed = await Navigator.of(
       context,
     ).push(AdminRequestsScreen.route(widget.rso));
-    if ((changed ?? false) && mounted) widget.onChanged();
+    if ((changed ?? false) && mounted) widget.vm.load();
   }
 }
 
 /// For members who aren't admins: ask the group's admins to become one.
 class _AdminAccess extends StatefulWidget {
-  const _AdminAccess({required this.rso, required this.onRequested});
+  const _AdminAccess({required this.rso, required this.vm});
 
   final Rso rso;
-  final VoidCallback onRequested;
+  final RsoDetailViewModel vm;
 
   @override
   State<_AdminAccess> createState() => _AdminAccessState();
 }
 
 class _AdminAccessState extends State<_AdminAccess> {
-  bool _sending = false;
-
   Future<void> _request() async {
     final note = await showModalBottomSheet<String>(
       context: context,
@@ -843,22 +814,10 @@ class _AdminAccessState extends State<_AdminAccess> {
     if (note == null || !mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _sending = true);
-    try {
-      await context.read<AppServices>().groups.requestAdmin(
-        widget.rso.id,
-        note: note.isEmpty ? null : note,
-      );
-      messenger.showSnackBar(
-        const SnackBar(content: Text("Request sent to the group's admins.")),
-      );
-      widget.onRequested();
-    } on ApiException catch (e) {
-      if (mounted) reportError(context, e, screen: Screens.groupDetail);
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
+    final message = await widget.vm.requestAdmin(
+      note: note.isEmpty ? null : note,
+    );
+    messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -883,7 +842,7 @@ class _AdminAccessState extends State<_AdminAccess> {
     }
     return PrimaryButton.secondary(
       label: 'Request admin access',
-      busy: _sending,
+      busy: widget.vm.requestingAdmin,
       onPressed: _request,
     );
   }
