@@ -37,6 +37,7 @@ dependencies:
   provider: ^6.1.5+1
   google_fonts: ^8.2.1
   http: ^1.6.0
+  http_parser: ^4.1.0
   firebase_core: ^4.15.0
   firebase_auth: ^6.7.0
   device_info_plus: ^13.3.0
@@ -46,7 +47,6 @@ dependencies:
   mobile_scanner: ^7.4.2
   qr_flutter: ^4.1.0
   firebase_messaging: ^16.7.0
-  firebase_storage: ^13.0.0
   image_picker: ^1.1.2
   flutter_local_notifications: ^19.4.0
   timezone: ^0.10.1

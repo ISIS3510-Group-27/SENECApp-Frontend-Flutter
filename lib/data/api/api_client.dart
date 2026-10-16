@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../auth/auth_service.dart';
 import 'client_context.dart';
@@ -77,18 +78,50 @@ class ApiClient {
   Future<dynamic> delete(String path, {Map<String, Object?>? query}) =>
       _send('DELETE', path, query: query);
 
+  /// Sends one file as `multipart/form-data` (POST), e.g. a cover photo.
+  Future<dynamic> upload(
+    String path, {
+    required String field,
+    required List<int> bytes,
+    required String filename,
+    required String contentType,
+  }) => _sendBuilt(() {
+    final [type, subtype] = contentType.split('/');
+    return http.MultipartRequest('POST', _uri(path, null))
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          field,
+          bytes,
+          filename: filename,
+          contentType: MediaType(type, subtype),
+        ),
+      );
+  });
+
   Future<dynamic> _send(
     String method,
     String path, {
     Map<String, Object?>? query,
     Object? body,
-  }) async {
-    var response = await _attempt(method, path, query, body);
+  }) => _sendBuilt(() {
+    final request = http.Request(method, _uri(path, query));
+    if (body != null) {
+      request
+        ..headers['Content-Type'] = 'application/json'
+        ..body = jsonEncode(body);
+    }
+    return request;
+  });
+
+  /// Sends the request [build] makes (a new one per attempt: a sent request
+  /// can't be sent again).
+  Future<dynamic> _sendBuilt(http.BaseRequest Function() build) async {
+    var response = await _attempt(build);
 
     // Tokens last an hour. One expired mid-request gets a single retry with a
     // freshly minted token before the session is treated as lost.
     if (response.statusCode == 401) {
-      response = await _attempt(method, path, query, body, refreshToken: true);
+      response = await _attempt(build, refreshToken: true);
       if (response.statusCode == 401) onUnauthorized?.call();
     }
 
@@ -100,24 +133,15 @@ class ApiClient {
   }
 
   Future<http.Response> _attempt(
-    String method,
-    String path,
-    Map<String, Object?>? query,
-    Object? body, {
+    http.BaseRequest Function() build, {
     bool refreshToken = false,
   }) async {
-    final request = http.Request(method, _uri(path, query))
+    final request = build()
       ..headers.addAll(_context.headers)
       ..headers['Accept'] = 'application/json';
 
     final token = await _auth.idToken(forceRefresh: refreshToken);
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
-
-    if (body != null) {
-      request
-        ..headers['Content-Type'] = 'application/json'
-        ..body = jsonEncode(body);
-    }
 
     try {
       final streamed = await _http.send(request).timeout(timeout);

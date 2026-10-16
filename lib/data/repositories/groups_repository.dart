@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../api/api_client.dart';
 import '../models/admin_request.dart';
 import '../models/entry_point.dart';
@@ -97,8 +99,16 @@ class GroupsRepository {
         as Map<String, dynamic>,
   );
 
-  Future<Rso> updateImage(int id, String imageUrl) async => Rso.fromJson(
-    await _api.patch('/groups/$id', body: {'image_url': imageUrl})
+  /// Uploads a new cover photo (group admins). The backend resizes it, removes
+  /// its metadata (including GPS) and returns the updated group.
+  Future<Rso> uploadCover(int id, Uint8List photo) async => Rso.fromJson(
+    await _api.upload(
+          '/groups/$id/cover',
+          field: 'file',
+          bytes: photo,
+          filename: 'cover.jpg',
+          contentType: 'image/jpeg',
+        )
         as Map<String, dynamic>,
   );
 

@@ -9,7 +9,6 @@ import '../../core/widgets/async_states.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
-import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/entry_point.dart';
 import '../../state/app_state.dart';
@@ -20,6 +19,7 @@ import '../shell/home_shell.dart';
 import '../shell/track_screen.dart';
 import 'event_filters.dart';
 import 'event_itinerary_screen.dart';
+import 'events_view_model.dart';
 
 /// Every upcoming event, filterable down to the student's own
 ///  organizations.
@@ -34,81 +34,32 @@ class EventsScreen extends StatefulWidget {
 }
 
 class _EventsScreenState extends State<EventsScreen> {
-  bool _joinedOnly = false;
-  bool _savedOnly = false;
-  EventDateFilter _dateFilter = EventDateFilter.any;
-  final _searchController = TextEditingController();
-
-  /// Each list is fetched the first time it is shown, then kept.
-  final Map<bool, List<CampusEvent>> _events = {};
-  final Map<bool, String> _errors = {};
-
-  late final AppState _appState = context.read<AppState>();
-  late int _membershipVersion = _appState.membershipVersion;
+  late final EventsViewModel _vm = EventsViewModel(
+    events: context.read<AppServices>().events,
+    appState: context.read<AppState>(),
+    analytics: context.read<AppServices>().analytics,
+  );
 
   @override
   void initState() {
     super.initState();
-    _load(joinedOnly: false);
-    _appState.addListener(_onAppStateChanged);
+    _vm.start();
   }
 
   @override
   void dispose() {
-    _appState.removeListener(_onAppStateChanged);
-    _searchController.dispose();
+    _vm.dispose();
     super.dispose();
-  }
-
-  /// A group joined anywhere in the app adds its events to "My RSOs".
-  void _onAppStateChanged() {
-    if (_appState.membershipVersion == _membershipVersion) return;
-    _membershipVersion = _appState.membershipVersion;
-    _events.remove(true);
-    if (_joinedOnly) _load(joinedOnly: true);
-  }
-
-  Future<void> _load({required bool joinedOnly}) async {
-    setState(() => _errors.remove(joinedOnly));
-    try {
-      final events = await context.read<AppServices>().events.list(
-        mine: joinedOnly,
-      );
-      if (mounted) setState(() => _events[joinedOnly] = events);
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      reportError(context, e, screen: Screens.events);
-      setState(() => _errors[joinedOnly] = e.message);
-    }
   }
 
   Future<void> _scan() async {
     final result = await Navigator.of(context).push(CheckInScreen.route());
     // Checked in from here: refresh so the event shows it.
-    if (result != null && mounted) {
-      _events.clear();
-      _load(joinedOnly: _joinedOnly);
-    }
-  }
-
-  void _select({required bool joinedOnly}) {
-    setState(() {
-      _joinedOnly = joinedOnly;
-      _savedOnly = false;
-    });
-    if (!_events.containsKey(joinedOnly)) _load(joinedOnly: joinedOnly);
-  }
-
-  void _showSaved() {
-    setState(() {
-      _savedOnly = true;
-      _joinedOnly = false;
-    });
-    if (!_events.containsKey(false)) _load(joinedOnly: false);
+    if (result != null && mounted) _vm.reloadAll();
   }
 
   Future<void> _editSearch() async {
-    final controller = TextEditingController(text: _searchController.text);
+    final controller = TextEditingController(text: _vm.query);
     final query = await showModalBottomSheet<String>(
       context: context,
       useSafeArea: true,
@@ -167,42 +118,29 @@ class _EventsScreenState extends State<EventsScreen> {
     );
     controller.dispose();
     if (query == null) return;
-    _searchController.text = query;
-    setState(() {});
+    _vm.setQuery(query);
   }
 
   @override
-  Widget build(BuildContext context) => TrackScreen(
-    name: Screens.events,
-    tab: AppTab.events,
-    ready: _events.containsKey(_joinedOnly) || _errors.containsKey(_joinedOnly),
-    child: _buildScreen(context),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _vm,
+    builder: (context, _) => TrackScreen(
+      name: Screens.events,
+      tab: AppTab.events,
+      ready: _vm.ready,
+      child: _buildScreen(context),
+    ),
   );
 
   Widget _buildScreen(BuildContext context) {
-    final events = _events[_joinedOnly];
-    final error = _errors[_joinedOnly];
+    final vm = _vm;
+    final events = vm.events;
+    final error = vm.error;
     final appState = context.watch<AppState>();
-    final allEvents = _events[false] ?? events ?? const <CampusEvent>[];
-    final visibleEvents = events == null
-        ? null
-        : filterEvents(
-            events: _savedOnly
-                ? allEvents
-                      .where((event) => appState.isEventSaved(event.id))
-                      .toList()
-                : events,
-            query: _searchController.text,
-            dateFilter: _dateFilter,
-            now: widget.clock(),
-          );
-    final hasFilters =
-        _searchController.text.trim().isNotEmpty ||
-        _dateFilter != EventDateFilter.any ||
-        _savedOnly;
+    final visibleEvents = vm.visibleEvents(widget.clock());
 
     return RefreshIndicator(
-      onRefresh: () => _load(joinedOnly: _joinedOnly),
+      onRefresh: vm.reload,
       color: AppColors.accent,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -237,7 +175,7 @@ class _EventsScreenState extends State<EventsScreen> {
                 RoundIconButton(
                   icon: Icons.search_rounded,
                   tooltip: 'Search events',
-                  foreground: _searchController.text.trim().isEmpty
+                  foreground: vm.query.trim().isEmpty
                       ? AppColors.foreground
                       : AppColors.accent,
                   onPressed: _editSearch,
@@ -246,8 +184,8 @@ class _EventsScreenState extends State<EventsScreen> {
                 PopupMenuButton<EventDateFilter>(
                   tooltip: 'Filter by date',
                   color: AppColors.card,
-                  initialValue: _dateFilter,
-                  onSelected: (filter) => setState(() => _dateFilter = filter),
+                  initialValue: vm.dateFilter,
+                  onSelected: vm.setDateFilter,
                   itemBuilder: (context) => [
                     for (final filter in EventDateFilter.values)
                       PopupMenuItem(value: filter, child: Text(filter.label)),
@@ -255,7 +193,7 @@ class _EventsScreenState extends State<EventsScreen> {
                   child: RoundIconButton(
                     icon: Icons.tune_rounded,
                     tooltip: 'Filter by date',
-                    foreground: _dateFilter == EventDateFilter.any
+                    foreground: vm.dateFilter == EventDateFilter.any
                         ? AppColors.foreground
                         : AppColors.accent,
                     onPressed: () {},
@@ -275,7 +213,7 @@ class _EventsScreenState extends State<EventsScreen> {
             padding: EdgeInsets.symmetric(horizontal: kPageGutter),
             child: _FreeNowCard(),
           ),
-          if (_events[false] case final all?) ...[
+          if (vm.allEvents case final all?) ...[
             const SizedBox(height: 20),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
@@ -291,38 +229,34 @@ class _EventsScreenState extends State<EventsScreen> {
               children: [
                 SelectableChip.filter(
                   label: 'All Events',
-                  selected: !_joinedOnly,
-                  onSelected: (_) => _select(joinedOnly: false),
+                  selected: !vm.joinedOnly,
+                  onSelected: (_) => vm.select(joinedOnly: false),
                 ),
                 SelectableChip.filter(
                   label: 'My RSOs',
-                  selected: _joinedOnly,
-                  onSelected: (_) => _select(joinedOnly: true),
+                  selected: vm.joinedOnly,
+                  onSelected: (_) => vm.select(joinedOnly: true),
                 ),
                 SelectableChip.filter(
                   label: 'Saved',
-                  selected: _savedOnly,
-                  onSelected: (_) => _showSaved(),
+                  selected: vm.savedOnly,
+                  onSelected: (_) => vm.showSaved(),
                 ),
               ],
             ),
           ),
-          if (_searchController.text.trim().isNotEmpty ||
-              _dateFilter != EventDateFilter.any) ...[
+          if (vm.hasQueryOrDate) ...[
             const SizedBox(height: 10),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
               child: _ActiveFilters(
-                query: _searchController.text.trim(),
-                dateFilter: _dateFilter,
-                onClear: () {
-                  _searchController.clear();
-                  setState(() => _dateFilter = EventDateFilter.any);
-                },
+                query: vm.query.trim(),
+                dateFilter: vm.dateFilter,
+                onClear: vm.clearQueryAndDate,
               ),
             ),
           ],
-          if (_savedOnly && visibleEvents != null) ...[
+          if (vm.savedOnly && visibleEvents != null) ...[
             const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
@@ -339,24 +273,15 @@ class _EventsScreenState extends State<EventsScreen> {
           ],
           const SizedBox(height: 20),
           if (error != null)
-            ErrorBlock(
-              message: error,
-              onRetry: () => _load(joinedOnly: _joinedOnly),
-            )
+            ErrorBlock(message: error, onRetry: vm.reload)
           else if (events == null)
             const LoadingBlock()
           else if (visibleEvents!.isEmpty)
             _EmptyEventsState(
-              savedOnly: _savedOnly,
-              joinedOnly: _joinedOnly,
-              hasFilters: hasFilters,
-              onClear: () {
-                _searchController.clear();
-                setState(() {
-                  _dateFilter = EventDateFilter.any;
-                  _savedOnly = false;
-                });
-              },
+              savedOnly: vm.savedOnly,
+              joinedOnly: vm.joinedOnly,
+              hasFilters: vm.hasFilters,
+              onClear: vm.clearFilters,
             )
           else
             for (final event in visibleEvents)

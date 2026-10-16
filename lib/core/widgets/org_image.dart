@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/models/rso.dart';
 import '../assets/asset_catalog.dart';
+import '../config/app_config.dart';
 import '../theme/app_colors.dart';
 
 /// An organization's photo, with a graceful stand-in when there isn't one.
@@ -21,7 +22,10 @@ class OrgImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fallback = _Fallback(rso: rso, iconSize: iconSize);
-    final uploaded = rso.imageUrl?.contains('firebasestorage') ?? false;
+    // A photo the group uploaded beats the bundled art.
+    final uploaded =
+        (rso.imageUrl?.startsWith('/media/') ?? false) ||
+        (rso.imageUrl?.contains('firebasestorage') ?? false);
 
     if (AssetCatalog.orgImage(rso.imageSlug) case final path? when !uploaded) {
       return Image.asset(
@@ -35,7 +39,7 @@ class OrgImage extends StatelessWidget {
 
     if (rso.imageUrl case final url?) {
       return Image.network(
-        url,
+        AppConfig.resolveImageUrl(url),
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,

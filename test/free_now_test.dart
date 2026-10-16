@@ -160,6 +160,34 @@ void main() {
     expect(location.settingsOpened, [LocationProblem.deniedForever]);
   });
 
+  testWidgets('a class can be added on several days at once', (tester) async {
+    await openApp(tester, optedIn: false, withSchedule: false);
+    await openFreeNow(tester);
+    await tester.tap(find.text('Not now, use my schedule'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add schedule'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('+ Add class'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add class').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Pick at least one day.'), findsOneWidget);
+
+    await tester.tap(find.text('Mon'));
+    await tester.tap(find.text('Wed'));
+    await tester.pump();
+    await tester.tap(find.text('Add class on 2 days'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save schedule'));
+    await tester.pumpAndSettle();
+
+    final saved = backend.requestsTo('PUT', '/me/schedule').single;
+    final blocks = (jsonDecode(saved.body) as Map)['blocks'] as List;
+    expect([for (final b in blocks) b['weekday']], [0, 2]);
+    expect({for (final b in blocks) b['start_time']}, {'08:30:00'});
+  });
+
   testWidgets('without classes it offers to add them, then asks again', (
     tester,
   ) async {
@@ -230,11 +258,15 @@ void main() {
       // Monday 8:30-9:50 is taken by Cálculo II.
       await tester.tap(find.text('+ Add class'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Add class').last);
+      await tester.tap(find.text('Mon'));
+      await tester.tap(find.text('Thu'));
+      await tester.pump();
+      await tester.tap(find.text('Add class on 2 days'));
       await tester.pumpAndSettle();
 
+      // Only the day that clashes is named.
       expect(
-        find.text('That overlaps another class that day.'),
+        find.text('That overlaps another class on Monday.'),
         findsOneWidget,
       );
     });

@@ -10,7 +10,6 @@ import '../../core/widgets/badges.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
-import '../../data/api/api_client.dart';
 import '../../data/location/location_service.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/free_now.dart';
@@ -18,6 +17,7 @@ import '../../state/app_state.dart';
 import '../event_detail/event_detail_screen.dart';
 import '../schedule/schedule_screen.dart';
 import '../shell/track_screen.dart';
+import 'free_now_view_model.dart';
 
 /// "I have a gap between classes, what's on nearby?"
 ///
@@ -36,88 +36,59 @@ class FreeNowScreen extends StatefulWidget {
 }
 
 class _FreeNowScreenState extends State<FreeNowScreen> {
-  /// Asking before using location, until the student answers.
-  late bool _askingConsent = !context.read<AppState>().student.locationOptIn;
-
-  FreeNowSuggestions? _result;
-  String? _error;
-  bool _loading = false;
-
-  /// Why GPS wasn't used this time, if the student allowed it.
-  LocationProblem? _locationProblem;
+  late final FreeNowViewModel _vm = () {
+    final services = context.read<AppServices>();
+    return FreeNowViewModel(
+      recommendations: services.recommendations,
+      location: services.location,
+      appState: context.read<AppState>(),
+      analytics: services.analytics,
+    );
+  }();
 
   @override
   void initState() {
     super.initState();
-    if (!_askingConsent) _load();
+    _vm.start();
   }
 
-  /// Reads the position (if allowed) and asks for suggestions. Each call is
-  /// logged as the suggestions being shown, so it only runs on open, on
-  /// refresh and after the student changes something that affects it.
-  Future<void> _load() async {
-    final services = context.read<AppServices>();
-    final optedIn = context.read<AppState>().student.locationOptIn;
-    setState(() {
-      _askingConsent = false;
-      _loading = true;
-      _error = null;
-    });
-
-    LocationResult? fix;
-    if (optedIn) fix = await services.location.current();
-    if (!mounted) return;
-
-    try {
-      final result = await services.recommendations.freeNow(
-        latitude: fix?.latitude,
-        longitude: fix?.longitude,
-      );
-      if (!mounted) return;
-      setState(() {
-        _result = result;
-        _locationProblem = fix?.problem;
-      });
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      reportError(context, e, screen: Screens.freeNow);
-      setState(() => _error = e.message);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+  @override
+  void dispose() {
+    _vm.dispose();
+    super.dispose();
   }
 
   Future<void> _allowLocation() async {
     final messenger = ScaffoldMessenger.of(context);
-    try {
-      await context.read<AppState>().setLocationOptIn(true);
-    } on ApiException catch (e) {
-      if (mounted) reportError(context, e, screen: Screens.freeNow);
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-      return;
+    final problem = await _vm.allowLocation();
+    if (problem != null) {
+      messenger.showSnackBar(SnackBar(content: Text(problem)));
     }
-    await _load();
   }
 
   Future<void> _openSchedule() async {
     await Navigator.of(context).push(ScheduleScreen.route());
-    if (mounted) await _load();
+    if (mounted) await _vm.load();
   }
 
   @override
-  Widget build(BuildContext context) => TrackScreen(
-    name: Screens.freeNow,
-    ready: _askingConsent || _result != null || _error != null,
-    child: _buildScreen(context),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _vm,
+    builder: (context, _) => TrackScreen(
+      name: Screens.freeNow,
+      ready: _vm.ready,
+      child: _buildScreen(context),
+    ),
   );
 
   Widget _buildScreen(BuildContext context) {
-    final result = _result;
+    final vm = _vm;
+    final result = vm.result;
 
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _load,
+          onRefresh: vm.load,
           color: AppColors.accent,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
@@ -129,14 +100,14 @@ class _FreeNowScreenState extends State<FreeNowScreen> {
             children: [
               const _Header(),
               const SizedBox(height: 20),
-              if (_askingConsent)
-                _ConsentCard(onAllow: _allowLocation, onSkip: _load)
+              if (vm.askingConsent)
+                _ConsentCard(onAllow: _allowLocation, onSkip: vm.load)
               else if (result == null)
-                _error == null
+                vm.error == null
                     ? const LoadingBlock()
-                    : ErrorBlock(message: _error!, onRetry: _load)
+                    : ErrorBlock(message: vm.error!, onRetry: vm.load)
               else ...[
-                if (_loading)
+                if (vm.loading)
                   const Padding(
                     padding: EdgeInsets.only(bottom: 12),
                     child: LinearProgressIndicator(
@@ -152,9 +123,9 @@ class _FreeNowScreenState extends State<FreeNowScreen> {
                   optedIn: context.select<AppState, bool>(
                     (s) => s.student.locationOptIn,
                   ),
-                  problem: _locationProblem,
+                  problem: vm.locationProblem,
                   onAllow: _allowLocation,
-                  onRetry: _load,
+                  onRetry: vm.load,
                 ),
                 if (!result.scheduleKnown) ...[
                   const SizedBox(height: 14),

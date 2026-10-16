@@ -14,19 +14,18 @@ import '../../core/widgets/rso_list_tile.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
-import '../../data/api/api_client.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/group_filters.dart';
 import '../../data/models/recommendation.dart';
 import '../../data/models/rso.dart';
 import '../../data/models/rso_category.dart';
-import '../../data/repositories/groups_repository.dart';
 import '../../state/app_state.dart';
 import '../notifications/notifications_screen.dart';
 import '../recommendations/recommendations_screen.dart';
 import '../rso_detail/rso_detail_screen.dart';
 import '../shell/home_shell.dart';
 import '../shell/track_screen.dart';
+import 'discover_view_model.dart';
 import 'filters_sheet.dart';
 
 /// Landing tab: search, filter, browse, open
@@ -55,107 +54,37 @@ class DiscoverScreen extends StatefulWidget {
 class _DiscoverScreenState extends State<DiscoverScreen> {
   final _searchController = TextEditingController();
 
-  GroupFilters _filters = const GroupFilters();
-  GroupPage? _results;
-
-  /// Most popular groups, shown when recommendations can't be.
-  List<Rso> _featured = const [];
-
-  GroupRecommendations? _recommendations;
-  bool _recommendationsFailed = false;
-  String? _error;
-  bool _loading = false;
-
-  Timer? _debounce;
-
-  /// Only the latest search may update the list: an older, slower response
-  /// arriving last would otherwise overwrite newer results.
-  int _searchId = 0;
-
-  late final GroupsRepository _groups = context.read<AppServices>().groups;
+  late final DiscoverViewModel _vm = () {
+    final services = context.read<AppServices>();
+    return DiscoverViewModel(
+      groups: services.groups,
+      recommendations: services.recommendations,
+      analytics: services.analytics,
+      debounce: DiscoverScreen.searchDebounce,
+    );
+  }();
 
   @override
   void initState() {
     super.initState();
-    _search();
-    _loadRecommendations();
+    _vm.start();
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _vm.dispose();
     _searchController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadRecommendations() async {
-    try {
-      final recommendations = await context
-          .read<AppServices>()
-          .recommendations
-          .groups();
-      if (!mounted) return;
-      setState(() {
-        _recommendations = recommendations;
-        _recommendationsFailed = false;
-      });
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      reportError(context, e, screen: Screens.discover);
-      // Popular groups take the carousel's place.
-      setState(() => _recommendationsFailed = true);
-    }
-  }
-
-  /// Pull to refresh asks for new recommendations too.
-  Future<void> _refresh() => Future.wait([_search(), _loadRecommendations()]);
-
-  Future<void> _search() async {
-    _debounce?.cancel();
-    final searchId = ++_searchId;
-    final filters = _filters;
-    setState(() => _loading = true);
-    try {
-      final results = await _groups.search(filters);
-      if (!mounted || searchId != _searchId) return;
-      setState(() {
-        _results = results;
-        _error = null;
-        // Featured is the most popular groups: the first page of an unfiltered,
-        // default-sorted browse.
-        if (!filters.isSearch && filters.sort == GroupSort.popular) {
-          _featured = results.items.take(3).toList();
-        }
-      });
-    } on ApiException catch (e) {
-      if (!mounted || searchId != _searchId) return;
-      reportError(context, e, screen: Screens.discover);
-      setState(() => _error = e.message);
-    } finally {
-      if (mounted && searchId == _searchId) setState(() => _loading = false);
-    }
-  }
-
-  void _onQueryChanged(String value) {
-    _filters = _filters.copyWith(query: value);
-    _debounce?.cancel();
-    _debounce = Timer(DiscoverScreen.searchDebounce, _search);
-  }
-
-  void _onCategorySelected(RsoCategory category) {
-    _filters = _filters.copyWith(category: category);
-    _search();
   }
 
   Future<void> _openFilters() async {
     final chosen = await FiltersSheet.show(
       context,
-      current: _filters,
+      current: _vm.filters,
       catalog: context.read<AppServices>().catalog,
     );
     if (chosen == null || !mounted) return;
-    _filters = chosen;
-    _search();
+    _vm.applyFilters(chosen);
   }
 
   /// Groups opened from narrowed results were found by searching; the rest by
@@ -165,14 +94,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       RsoDetailScreen.route(
         item.group.id,
         entryPoint: EntryPoint.recommendation,
-        recRequestId: _recommendations!.requestId,
+        recRequestId: _vm.recommendations!.requestId,
         preview: item.group,
       ),
     );
   }
 
   void _openRso(Rso rso, {bool fromFeatured = false}) {
-    final entryPoint = !fromFeatured && _filters.isSearch
+    final entryPoint = !fromFeatured && _vm.filters.isSearch
         ? EntryPoint.search
         : EntryPoint.explore;
     Navigator.of(
@@ -181,28 +110,34 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => TrackScreen(
-    name: Screens.discover,
-    tab: AppTab.discover,
-    ready: _results != null || _error != null,
-    child: _buildScreen(context),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _vm,
+    builder: (context, _) => TrackScreen(
+      name: Screens.discover,
+      tab: AppTab.discover,
+      ready: _vm.ready,
+      child: _buildScreen(context),
+    ),
   );
 
   Widget _buildScreen(BuildContext context) {
-    final results = _results;
+    final vm = _vm;
+    final results = vm.results;
+    final filters = vm.filters;
+    final featured = vm.featured;
     final state = context.watch<AppState>();
     // Groups joined since the list was fetched stop being suggestions.
     final recommended = [
       for (final item
-          in _recommendations?.items ?? const <GroupRecommendation>[])
+          in vm.recommendations?.items ?? const <GroupRecommendation>[])
         if (!state.isMember(item.group)) item,
     ];
     // The carousels are a browsing aid, so they only show when the student
     // isn't actively searching or filtering.
-    final browsing = !_filters.isSearch;
+    final browsing = !filters.isSearch;
 
     return RefreshIndicator(
-      onRefresh: _refresh,
+      onRefresh: vm.refresh,
       color: AppColors.accent,
       child: ListView(
         padding: const EdgeInsets.only(bottom: kNavBarClearance),
@@ -218,8 +153,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 Expanded(
                   child: _SearchField(
                     controller: _searchController,
-                    onChanged: _onQueryChanged,
-                    onSubmitted: (_) => _search(),
+                    onChanged: vm.setQuery,
+                    onSubmitted: (_) => vm.search(),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -229,8 +164,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   size: 48,
                   iconSize: 20,
                   showDot:
-                      _filters.sheetCount > 0 ||
-                      _filters.sort != GroupSort.popular,
+                      filters.sheetCount > 0 ||
+                      filters.sort != GroupSort.popular,
                   onPressed: _openFilters,
                 ),
               ],
@@ -245,7 +180,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 trailing: _SeeAllButton(
                   onPressed: () => Navigator.of(
                     context,
-                  ).push(RecommendationsScreen.route(_recommendations!)),
+                  ).push(RecommendationsScreen.route(vm.recommendations!)),
                 ),
               ),
             ),
@@ -261,8 +196,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             // Popular groups instead, once recommendations failed or ran out
             // (the student joined them all).
           ] else if (browsing &&
-              (_recommendationsFailed || _recommendations != null) &&
-              _featured.isNotEmpty) ...[
+              (vm.recommendationsFailed || vm.recommendations != null) &&
+              featured.isNotEmpty) ...[
             const SizedBox(height: 20),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: kPageGutter),
@@ -270,15 +205,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ),
             const SizedBox(height: 12),
             _FeaturedCarousel(
-              rsos: _featured,
+              rsos: featured,
               onSelect: (index) =>
-                  _openRso(_featured[index], fromFeatured: true),
+                  _openRso(featured[index], fromFeatured: true),
             ),
           ],
           const SizedBox(height: 20),
           _CategoryRow(
-            selected: _filters.category,
-            onSelected: _onCategorySelected,
+            selected: filters.category,
+            onSelected: vm.selectCategory,
           ),
           const SizedBox(height: 20),
           Padding(
@@ -292,15 +227,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          if (_error case final error?)
-            ErrorBlock(message: error, onRetry: _search)
+          if (vm.error case final error?)
+            ErrorBlock(message: error, onRetry: vm.search)
           else if (results == null)
             const LoadingBlock()
           else if (results.items.isEmpty)
             const _EmptyResults()
           else ...[
             // Results stay on screen while a newer search loads.
-            if (_loading)
+            if (vm.loading)
               const Padding(
                 padding: EdgeInsets.fromLTRB(kPageGutter, 0, kPageGutter, 12),
                 child: LinearProgressIndicator(

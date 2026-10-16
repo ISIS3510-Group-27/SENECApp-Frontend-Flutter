@@ -20,7 +20,7 @@ import 'data/repositories/me_repository.dart';
 import 'data/repositories/notifications_repository.dart';
 import 'data/repositories/recommendations_repository.dart';
 import 'data/sensors/ambient_light.dart';
-import 'data/storage/photo_storage.dart';
+import 'data/storage/photo_picker.dart';
 
 /// The long-lived objects that talk to the outside world, built once at launch.
 ///
@@ -36,7 +36,7 @@ class AppServices {
     this.push = const DisabledPushService(),
     this.ambientLight = const NoAmbientLightSensor(),
     this.reminders = const DisabledReminderNotifications(),
-    this.photos = const DisabledPhotoStorage(),
+    this.photos = const DisabledPhotoPicker(),
   }) : analytics = analytics ?? Analytics(api: api, context: api.context),
        me = MeRepository(api),
        groups = GroupsRepository(api),
@@ -65,7 +65,8 @@ class AppServices {
 
   final ReminderNotifications reminders;
 
-  final PhotoStorage photos;
+  /// Camera and gallery, for group cover photos (uploaded to the backend).
+  final PhotoPicker photos;
 
   final MeRepository me;
   final GroupsRepository groups;
@@ -118,9 +119,7 @@ class AppServices {
           : const DisabledPushService(),
       ambientLight: const PlatformAmbientLightSensor(),
       reminders: platformReminders(),
-      photos: AppConfig.firebaseEnabled && !kIsWeb
-          ? FirebasePhotoStorage()
-          : const DisabledPhotoStorage(),
+      photos: DevicePhotoPicker(),
     );
   }
 }
