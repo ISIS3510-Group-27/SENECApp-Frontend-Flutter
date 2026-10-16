@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../../core/concurrency/background_json.dart';
 import 'local_store.dart';
 
 /// [LocalStore] on a relational SQLite database (`sqflite`), one file per
@@ -13,6 +14,10 @@ import 'local_store.dart';
 /// app shows (My RSOs, the Explore page, all events, my events) are join
 /// tables that keep each list's order, read back with a JOIN. Each row keeps
 /// the backend's JSON as received plus the columns the queries need.
+///
+/// Lists are encoded before a write and decoded after a read in one pass, on a
+/// background isolate when they're long ([BackgroundJson]), so saving or
+/// showing a long list doesn't block the screen.
 class SqliteLocalStore implements LocalStore {
   SqliteLocalStore({
     DatabaseFactory? factory,
@@ -63,33 +68,36 @@ class SqliteLocalStore implements LocalStore {
   // --- Groups ---------------------------------------------------------------
 
   @override
-  Future<void> saveGroups(String name, List<Object?> groups) =>
-      _write((txn, now) async {
-        final batch = txn.batch();
-        for (final group in groups.cast<Map<String, dynamic>>()) {
-          batch
-            ..rawInsert(
-              'INSERT OR IGNORE INTO groups (id, name, summary_json, saved_at) '
-              'VALUES (?, ?, ?, ?)',
-              [group['id'], group['name'], jsonEncode(group), now],
-            )
-            ..rawUpdate(
-              'UPDATE groups SET name = ?, summary_json = ?, saved_at = ? '
-              'WHERE id = ?',
-              [group['name'], jsonEncode(group), now, group['id']],
-            );
-        }
-        batch.delete('group_lists', where: 'list = ?', whereArgs: [name]);
-        for (final (position, group) in groups.indexed) {
-          batch.insert('group_lists', {
-            'list': name,
-            'position': position,
-            'group_id': (group as Map<String, dynamic>)['id'],
-          });
-        }
-        _markSaved(batch, 'groups:$name', now);
-        await batch.commit(noResult: true);
-      });
+  Future<void> saveGroups(String name, List<Object?> groups) async {
+    final texts = await BackgroundJson.encodeAll(groups);
+    await _write((txn, now) async {
+      final batch = txn.batch();
+      for (final (i, item) in groups.indexed) {
+        final group = item! as Map<String, dynamic>;
+        batch
+          ..rawInsert(
+            'INSERT OR IGNORE INTO groups (id, name, summary_json, saved_at) '
+            'VALUES (?, ?, ?, ?)',
+            [group['id'], group['name'], texts[i], now],
+          )
+          ..rawUpdate(
+            'UPDATE groups SET name = ?, summary_json = ?, saved_at = ? '
+            'WHERE id = ?',
+            [group['name'], texts[i], now, group['id']],
+          );
+      }
+      batch.delete('group_lists', where: 'list = ?', whereArgs: [name]);
+      for (final (position, group) in groups.indexed) {
+        batch.insert('group_lists', {
+          'list': name,
+          'position': position,
+          'group_id': (group as Map<String, dynamic>)['id'],
+        });
+      }
+      _markSaved(batch, 'groups:$name', now);
+      await batch.commit(noResult: true);
+    });
+  }
 
   @override
   Future<Cached<List<Object?>>?> groups(String name) => _readList(
@@ -124,42 +132,38 @@ class SqliteLocalStore implements LocalStore {
   // --- Events ---------------------------------------------------------------
 
   @override
-  Future<void> saveEvents(String name, List<Object?> events) => _write((
-    txn,
-    now,
-  ) async {
-    final batch = txn.batch();
-    for (final event in events.cast<Map<String, dynamic>>()) {
-      final values = [
-        event['group_id'],
-        event['starts_at'],
-        jsonEncode(event),
-        now,
-      ];
-      batch
-        ..rawInsert(
-          'INSERT OR IGNORE INTO events '
-          '(group_id, starts_at, summary_json, saved_at, id) '
-          'VALUES (?, ?, ?, ?, ?)',
-          [...values, event['id']],
-        )
-        ..rawUpdate(
-          'UPDATE events SET group_id = ?, starts_at = ?, summary_json = ?, '
-          'saved_at = ? WHERE id = ?',
-          [...values, event['id']],
-        );
-    }
-    batch.delete('event_lists', where: 'list = ?', whereArgs: [name]);
-    for (final (position, event) in events.indexed) {
-      batch.insert('event_lists', {
-        'list': name,
-        'position': position,
-        'event_id': (event as Map<String, dynamic>)['id'],
-      });
-    }
-    _markSaved(batch, 'events:$name', now);
-    await batch.commit(noResult: true);
-  });
+  Future<void> saveEvents(String name, List<Object?> events) async {
+    final texts = await BackgroundJson.encodeAll(events);
+    await _write((txn, now) async {
+      final batch = txn.batch();
+      for (final (i, item) in events.indexed) {
+        final event = item! as Map<String, dynamic>;
+        final values = [event['group_id'], event['starts_at'], texts[i], now];
+        batch
+          ..rawInsert(
+            'INSERT OR IGNORE INTO events '
+            '(group_id, starts_at, summary_json, saved_at, id) '
+            'VALUES (?, ?, ?, ?, ?)',
+            [...values, event['id']],
+          )
+          ..rawUpdate(
+            'UPDATE events SET group_id = ?, starts_at = ?, summary_json = ?, '
+            'saved_at = ? WHERE id = ?',
+            [...values, event['id']],
+          );
+      }
+      batch.delete('event_lists', where: 'list = ?', whereArgs: [name]);
+      for (final (position, event) in events.indexed) {
+        batch.insert('event_lists', {
+          'list': name,
+          'position': position,
+          'event_id': (event as Map<String, dynamic>)['id'],
+        });
+      }
+      _markSaved(batch, 'events:$name', now);
+      await batch.commit(noResult: true);
+    });
+  }
 
   @override
   Future<Cached<List<Object?>>?> events(String name) => _readList(
@@ -194,20 +198,21 @@ class SqliteLocalStore implements LocalStore {
   // --- Notifications and documents ------------------------------------------
 
   @override
-  Future<void> saveNotifications(List<Object?> notifications) =>
-      _write((txn, now) async {
-        final batch = txn.batch()..delete('notifications');
-        for (final (position, item) in notifications.indexed) {
-          final notification = item as Map<String, dynamic>;
-          batch.insert('notifications', {
-            'id': notification['id'],
-            'position': position,
-            'json': jsonEncode(notification),
-          });
-        }
-        _markSaved(batch, 'notifications', now);
-        await batch.commit(noResult: true);
-      });
+  Future<void> saveNotifications(List<Object?> notifications) async {
+    final texts = await BackgroundJson.encodeAll(notifications);
+    await _write((txn, now) async {
+      final batch = txn.batch()..delete('notifications');
+      for (final (position, item) in notifications.indexed) {
+        batch.insert('notifications', {
+          'id': (item! as Map<String, dynamic>)['id'],
+          'position': position,
+          'json': texts[position],
+        });
+      }
+      _markSaved(batch, 'notifications', now);
+      await batch.commit(noResult: true);
+    });
+  }
 
   @override
   Future<Cached<List<Object?>>?> notifications() => _readList(
@@ -341,9 +346,10 @@ class SqliteLocalStore implements LocalStore {
     // Never stored, as opposed to stored empty.
     if (saved.isEmpty) return null;
     final rows = await db.rawQuery(sql, args);
-    return Cached([
-      for (final row in rows) jsonDecode(row['json']! as String),
-    ], _time(saved.single['saved_at']));
+    final values = await BackgroundJson.decodeAll([
+      for (final row in rows) row['json']! as String,
+    ]);
+    return Cached(values, _time(saved.single['saved_at']));
   }
 
   Future<Cached<Map<String, dynamic>>?> _readDetail(

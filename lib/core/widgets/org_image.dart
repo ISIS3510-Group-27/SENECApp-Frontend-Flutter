@@ -1,10 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
+import '../../data/local/cover_cache.dart';
 import '../../data/models/rso.dart';
 import '../assets/asset_catalog.dart';
-import '../config/app_config.dart';
 import '../theme/app_colors.dart';
 
 /// An organization's photo, with a graceful stand-in when there isn't one.
@@ -24,25 +23,12 @@ class OrgImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fallback = _Fallback(rso: rso, iconSize: iconSize);
-    // A photo the group uploaded beats the bundled art.
-    final uploaded =
-        (rso.imageUrl?.startsWith('/media/') ?? false) ||
-        (rso.imageUrl?.contains('firebasestorage') ?? false);
 
-    if (AssetCatalog.orgImage(rso.imageSlug) case final path? when !uploaded) {
-      return Image.asset(
-        path,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        errorBuilder: (_, _, _) => fallback,
-      );
-    }
-
-    if (rso.imageUrl case final url?) {
+    // An uploaded photo, from the phone's copy when it's there.
+    if (CoverCache.urlFor(rso) case final url?) {
       return CachedNetworkImage(
-        imageUrl: AppConfig.resolveImageUrl(url),
-        cacheManager: coverCache,
+        imageUrl: url,
+        cacheManager: CoverCache.shared,
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
@@ -53,22 +39,18 @@ class OrgImage extends StatelessWidget {
       );
     }
 
+    if (AssetCatalog.orgImage(rso.imageSlug) case final path?) {
+      return Image.asset(
+        path,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (_, _, _) => fallback,
+      );
+    }
+
     return fallback;
   }
-
-  /// Group photos on disk, so covers show offline and aren't downloaded again
-  /// on every launch.
-  ///
-  /// Every upload gets a new URL, so a stored photo is never out of date: 30
-  /// days only bounds how long an unseen group's photo takes space. 200 files
-  /// (about 150 KB each after the backend's resize) cap it near 30 MB.
-  static final coverCache = CacheManager(
-    Config(
-      'senecapp_covers',
-      stalePeriod: const Duration(days: 30),
-      maxNrOfCacheObjects: 200,
-    ),
-  );
 }
 
 class _Fallback extends StatelessWidget {

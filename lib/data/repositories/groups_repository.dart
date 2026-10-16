@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import '../../core/cache/lru_cache.dart';
 import '../api/api_client.dart';
+import '../local/cover_cache.dart';
 import '../local/local_store.dart';
 import '../local/offline_cache.dart';
 import '../models/admin_request.dart';
@@ -28,11 +30,15 @@ class GroupPage {
 /// session are also kept in memory ([recentDetail]), so going back to one
 /// shows it at once while the live copy loads.
 class GroupsRepository {
-  GroupsRepository(this._api, {OfflineCache? cache})
-    : _cache = cache ?? OfflineCache.disabled();
+  GroupsRepository(this._api, {OfflineCache? cache, CoverCache? covers})
+    : _cache = cache ?? OfflineCache.disabled(),
+      _covers = covers;
 
   final ApiClient _api;
   final OfflineCache _cache;
+
+  /// Where the student's groups' photos are downloaded ahead of time.
+  final CoverCache? _covers;
 
   /// A student opens a handful of groups per session, and going back to one
   /// is common (list, profile, back, another profile, back to the first). 30
@@ -212,13 +218,22 @@ class GroupsRepository {
   );
 
   /// Groups the student is an active member of, most recently joined first.
-  Future<List<Rso>> mine() => _cache.networkFirst(
-    mineKey,
-    fetch: () => _api.get('/me/groups'),
-    parse: _list,
-    save: (json) => _cache.store.saveGroups('mine', json! as List),
-    load: () => _cache.store.groups('mine'),
-  );
+  ///
+  /// After a live answer, their cover photos are downloaded in the background
+  /// (not awaited: the list shows right away), so My RSOs has them offline.
+  Future<List<Rso>> mine() async {
+    final groups = await _cache.networkFirst(
+      mineKey,
+      fetch: () => _api.get('/me/groups'),
+      parse: _list,
+      save: (json) => _cache.store.saveGroups('mine', json! as List),
+      load: () => _cache.store.groups('mine'),
+    );
+    if (_cache.freshness.cachedAt(mineKey) == null) {
+      unawaited(_covers?.prefetch(groups));
+    }
+    return groups;
+  }
 
   static GroupPage _page(Object? json) {
     final page = json! as Map<String, dynamic>;

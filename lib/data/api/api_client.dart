@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
+import '../../core/concurrency/background_json.dart';
 import '../auth/auth_service.dart';
 import 'client_context.dart';
 
@@ -129,10 +130,12 @@ class ApiClient {
       if (response.statusCode == 401) onUnauthorized?.call();
     }
 
-    final text = utf8.decode(response.bodyBytes);
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return text.isEmpty ? null : jsonDecode(text);
+      // Long lists are decoded on a background isolate, so the screen keeps
+      // drawing while they're parsed.
+      return BackgroundJson.decodeBytes(response.bodyBytes);
     }
+    final text = utf8.decode(response.bodyBytes);
     throw ApiException(response.statusCode, _errorMessage(response, text));
   }
 

@@ -11,6 +11,7 @@ import 'data/auth/auth_service.dart';
 import 'data/auth/dev_auth_service.dart';
 import 'data/auth/firebase_auth_service.dart';
 import 'data/connectivity/connectivity_service.dart';
+import 'data/local/cover_cache.dart';
 import 'data/local/local_store.dart';
 import 'data/local/offline_cache.dart';
 import 'data/local/sqlite_local_store.dart';
@@ -43,6 +44,7 @@ class AppServices {
     this.photos = const DisabledPhotoPicker(),
     LocalStore store = const NoLocalStore(),
     this.connectivity = const AlwaysConnected(),
+    this.covers,
   }) : analytics = analytics ?? Analytics(api: api, context: api.context),
        offline = OfflineCache(store: store),
        recommendations = RecommendationsRepository(api);
@@ -70,6 +72,10 @@ class AppServices {
   /// Camera and gallery, for group cover photos (uploaded to the backend).
   final PhotoPicker photos;
 
+  /// Group photos on disk, downloaded ahead of time for offline use. None in
+  /// tests, which never download images.
+  final CoverCache? covers;
+
   /// Whether the phone has a network, and when that changes.
   final ConnectivityService connectivity;
 
@@ -78,7 +84,11 @@ class AppServices {
   final OfflineCache offline;
 
   late final MeRepository me = MeRepository(api, cache: offline);
-  late final GroupsRepository groups = GroupsRepository(api, cache: offline);
+  late final GroupsRepository groups = GroupsRepository(
+    api,
+    cache: offline,
+    covers: covers,
+  );
   late final EventsRepository events = EventsRepository(api, cache: offline);
   late final NotificationsRepository notifications = NotificationsRepository(
     api,
@@ -135,6 +145,7 @@ class AppServices {
       // No SQLite in the browser; the web build simply has no offline copy.
       store: kIsWeb ? const NoLocalStore() : SqliteLocalStore(),
       connectivity: PlusConnectivityService(),
+      covers: CoverCache(),
     );
   }
 }
