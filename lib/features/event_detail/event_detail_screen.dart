@@ -11,7 +11,6 @@ import '../../core/widgets/async_states.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
-import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/check_in.dart';
 import '../../data/models/entry_point.dart';
@@ -22,6 +21,7 @@ import '../check_in/check_in_screen.dart';
 import '../events/event_planning.dart';
 import '../rso_detail/rso_detail_screen.dart';
 import '../shell/track_screen.dart';
+import 'event_detail_view_model.dart';
 
 /// One event: when, where, who hosts it.
 ///
@@ -63,73 +63,36 @@ class EventDetailScreen extends StatefulWidget {
 }
 
 class _EventDetailScreenState extends State<EventDetailScreen> {
-  CampusEvent? _event;
-  String? _error;
-
-  /// The venue's QR code, when the student organizes the hosting group.
-  CheckInCode? _organizerCode;
-  List<ScheduleBlock>? _conflicts;
+  late final EventDetailViewModel _vm = () {
+    final services = context.read<AppServices>();
+    return EventDetailViewModel(
+      eventId: widget.eventId,
+      entryPoint: widget.entryPoint,
+      recRequestId: widget.recRequestId,
+      events: services.events,
+      me: services.me,
+      appState: context.read<AppState>(),
+      analytics: services.analytics,
+    );
+  }();
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _vm.load();
   }
 
-  Future<void> _load() async {
-    setState(() => _error = null);
-    try {
-      final event = await context.read<AppServices>().events.detail(
-        widget.eventId,
-        entryPoint: widget.entryPoint,
-        recRequestId: widget.recRequestId,
-      );
-      if (!mounted) return;
-      setState(() => _event = event);
-      _loadOrganizerCode(event);
-      _loadScheduleConflicts(event);
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      reportError(context, e, screen: Screens.eventDetail);
-      setState(() => _error = e.message);
-    }
-  }
-
-  /// Only the group's admins may show the QR code, and the app can't tell
-  /// them apart from other members, so it asks: admins get the code, everyone
-  /// else a refusal, which just means no button. Not logged as analytics.
-  Future<void> _loadOrganizerCode(CampusEvent event) async {
-    if (event.isCancelled ||
-        !context.read<AppState>().isMemberOf(event.rsoId)) {
-      return;
-    }
-    try {
-      final code = await context.read<AppServices>().events.checkInCode(
-        event.id,
-      );
-      if (mounted) setState(() => _organizerCode = code);
-    } on ApiException {
-      // Not an organizer.
-    }
+  @override
+  void dispose() {
+    _vm.dispose();
+    super.dispose();
   }
 
   Future<void> _checkIn(CampusEvent event) async {
     final result = await Navigator.of(
       context,
     ).push(CheckInScreen.route(event: event));
-    if (result != null && mounted) {
-      setState(() => _event = event.copyWith(checkedIn: true));
-    }
-  }
-
-  Future<void> _loadScheduleConflicts(CampusEvent event) async {
-    try {
-      final schedule = await context.read<AppServices>().me.schedule();
-      if (!mounted) return;
-      setState(() => _conflicts = conflictingClasses(event, schedule));
-    } on ApiException {
-      if (mounted) setState(() => _conflicts = const []);
-    }
+    if (result != null && mounted) _vm.markCheckedIn();
   }
 
   Future<void> _copyDetails(CampusEvent event) async {
@@ -141,14 +104,18 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => TrackScreen(
-    name: Screens.eventDetail,
-    ready: _event != null || _error != null,
-    child: _buildScreen(context),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _vm,
+    builder: (context, _) => TrackScreen(
+      name: Screens.eventDetail,
+      ready: _vm.ready,
+      child: _buildScreen(context),
+    ),
   );
 
   Widget _buildScreen(BuildContext context) {
-    final event = _event ?? widget.preview;
+    final vm = _vm;
+    final event = vm.event ?? widget.preview;
     final appState = context.watch<AppState>();
 
     return Scaffold(
@@ -172,9 +139,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               ),
             ),
             if (event == null)
-              _error == null
+              vm.error == null
                   ? const LoadingBlock()
-                  : ErrorBlock(message: _error!, onRetry: _load)
+                  : ErrorBlock(message: vm.error!, onRetry: vm.load)
             else ...[
               const SizedBox(height: 20),
               _Heading(event: event),
@@ -211,26 +178,26 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   ),
                 ],
               ),
-              if (_conflicts case final conflicts?) ...[
+              if (vm.conflicts case final conflicts?) ...[
                 if (conflicts.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   _ClassConflictWarning(conflicts: conflicts),
                 ],
               ],
-              if (_event case final full?)
+              if (vm.event case final full?)
                 if (!full.isCancelled && full.startsAt.isAfter(DateTime.now()))
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
                     child: _LeaveReminderCard(event: full),
                   ),
               // Check-in needs the full event; the preview may be stale.
-              if (_event != null)
+              if (vm.event != null)
                 _CheckInSection(
                   event: event,
                   now: DateTime.now(),
                   onCheckIn: () => _checkIn(event),
                 ),
-              if (_organizerCode case final code?) ...[
+              if (vm.organizerCode case final code?) ...[
                 const SizedBox(height: 10),
                 PrimaryButton.secondary(
                   label: 'Show check-in QR',
