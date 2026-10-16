@@ -177,4 +177,21 @@ void main() {
 
     expect(find.text('0 unread'), findsOneWidget);
   });
+
+  testWidgets('every Account row in Profile starts at the same edge', (
+    tester,
+  ) async {
+    await pumpSignedIn(tester);
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Outdoor mode'));
+    await tester.pumpAndSettle();
+    // A short subtitle is where a row that doesn't fill the card shows.
+    await tester.tap(find.text('Off').last);
+    await tester.pumpAndSettle();
+
+    final left = tester.getTopLeft(find.text('Use my location')).dx;
+    expect(tester.getTopLeft(find.text('Outdoor mode')).dx, left);
+    expect(tester.getTopLeft(find.text('Class schedule')).dx, left);
+  });
 }

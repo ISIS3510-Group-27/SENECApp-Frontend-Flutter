@@ -462,7 +462,10 @@ class _OutdoorRow extends StatelessWidget {
         'Turns on by itself in direct sunlight (light sensor)',
     };
 
-    return Padding(
+    // Full width like the ListTiles around it; otherwise the card's Column
+    // centers it and a short subtitle pushes the whole row inwards.
+    return Container(
+      width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

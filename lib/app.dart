@@ -31,6 +31,7 @@ class SenecApp extends StatelessWidget {
             me: services.me,
             api: services.api,
             analytics: services.analytics,
+            offline: services.offline,
             push: PushRegistration(
               push: services.push,
               notifications: services.notifications,
@@ -53,10 +54,7 @@ class SenecApp extends StatelessWidget {
         theme: AppTheme.dark,
         home: const _SessionGate(),
         builder: (context, child) => PhoneFrame(
-          child: OutdoorView(
-            mode: context.read<OutdoorMode>(),
-            child: child!,
-          ),
+          child: OutdoorView(mode: context.read<OutdoorMode>(), child: child!),
         ),
       ),
     );

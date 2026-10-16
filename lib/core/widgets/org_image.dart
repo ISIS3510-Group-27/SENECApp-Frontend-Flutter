@@ -1,4 +1,6 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 import '../../data/models/rso.dart';
 import '../assets/asset_catalog.dart';
@@ -38,20 +40,35 @@ class OrgImage extends StatelessWidget {
     }
 
     if (rso.imageUrl case final url?) {
-      return Image.network(
-        AppConfig.resolveImageUrl(url),
+      return CachedNetworkImage(
+        imageUrl: AppConfig.resolveImageUrl(url),
+        cacheManager: coverCache,
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
-        // The gradient shows while the photo downloads, and stays if it fails.
-        frameBuilder: (_, child, frame, wasSynchronouslyLoaded) =>
-            frame == null && !wasSynchronouslyLoaded ? fallback : child,
-        errorBuilder: (_, _, _) => fallback,
+        // The gradient shows while the photo downloads, and stays if it fails
+        // (offline, and never downloaded before).
+        placeholder: (_, _) => fallback,
+        errorWidget: (_, _, _) => fallback,
       );
     }
 
     return fallback;
   }
+
+  /// Group photos on disk, so covers show offline and aren't downloaded again
+  /// on every launch.
+  ///
+  /// Every upload gets a new URL, so a stored photo is never out of date: 30
+  /// days only bounds how long an unseen group's photo takes space. 200 files
+  /// (about 150 KB each after the backend's resize) cap it near 30 MB.
+  static final coverCache = CacheManager(
+    Config(
+      'senecapp_covers',
+      stalePeriod: const Duration(days: 30),
+      maxNrOfCacheObjects: 200,
+    ),
+  );
 }
 
 class _Fallback extends StatelessWidget {

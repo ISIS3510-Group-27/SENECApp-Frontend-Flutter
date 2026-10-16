@@ -19,6 +19,10 @@ class ApiException implements Exception {
 
   bool get isNetworkError => statusCode == null;
 
+  /// The backend couldn't answer: no connection, a timeout, or the server
+  /// itself failing (5xx). What the phone has stored is the best answer then.
+  bool get isUnreachable => statusCode == null || statusCode! >= 500;
+
   @override
   String toString() => 'ApiException($statusCode): $message';
 }
@@ -140,7 +144,17 @@ class ApiClient {
       ..headers.addAll(_context.headers)
       ..headers['Accept'] = 'application/json';
 
-    final token = await _auth.idToken(forceRefresh: refreshToken);
+    final String? token;
+    try {
+      token = await _auth.idToken(forceRefresh: refreshToken);
+    } on Exception {
+      // The hourly token refresh needs the network too: offline it fails
+      // before the request is even sent.
+      throw const ApiException(
+        null,
+        "Can't reach SENECApp. Check your connection.",
+      );
+    }
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
 
     try {

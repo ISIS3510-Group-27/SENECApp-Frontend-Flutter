@@ -10,6 +10,9 @@ import 'data/api/client_context.dart';
 import 'data/auth/auth_service.dart';
 import 'data/auth/dev_auth_service.dart';
 import 'data/auth/firebase_auth_service.dart';
+import 'data/local/local_store.dart';
+import 'data/local/offline_cache.dart';
+import 'data/local/sqlite_local_store.dart';
 import 'data/location/location_service.dart';
 import 'data/push/push_service.dart';
 import 'data/reminders/reminder_notifications.dart';
@@ -37,12 +40,9 @@ class AppServices {
     this.ambientLight = const NoAmbientLightSensor(),
     this.reminders = const DisabledReminderNotifications(),
     this.photos = const DisabledPhotoPicker(),
+    LocalStore store = const NoLocalStore(),
   }) : analytics = analytics ?? Analytics(api: api, context: api.context),
-       me = MeRepository(api),
-       groups = GroupsRepository(api),
-       events = EventsRepository(api),
-       notifications = NotificationsRepository(api),
-       catalog = CatalogRepository(api),
+       offline = OfflineCache(store: store),
        recommendations = RecommendationsRepository(api);
 
   final AuthService auth;
@@ -68,11 +68,18 @@ class AppServices {
   /// Camera and gallery, for group cover photos (uploaded to the backend).
   final PhotoPicker photos;
 
-  final MeRepository me;
-  final GroupsRepository groups;
-  final EventsRepository events;
-  final NotificationsRepository notifications;
-  final CatalogRepository catalog;
+  /// The phone's copy of what the student last saw, used when the backend
+  /// can't be reached, and which answers on screen came from it.
+  final OfflineCache offline;
+
+  late final MeRepository me = MeRepository(api, cache: offline);
+  late final GroupsRepository groups = GroupsRepository(api, cache: offline);
+  late final EventsRepository events = EventsRepository(api, cache: offline);
+  late final NotificationsRepository notifications = NotificationsRepository(
+    api,
+    cache: offline,
+  );
+  late final CatalogRepository catalog = CatalogRepository(api, cache: offline);
   final RecommendationsRepository recommendations;
 
   static Future<AppServices> create() async {
@@ -120,6 +127,8 @@ class AppServices {
       ambientLight: const PlatformAmbientLightSensor(),
       reminders: platformReminders(),
       photos: DevicePhotoPicker(),
+      // No SQLite in the browser; the web build simply has no offline copy.
+      store: kIsWeb ? const NoLocalStore() : SqliteLocalStore(),
     );
   }
 }

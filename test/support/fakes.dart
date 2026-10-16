@@ -10,6 +10,7 @@ import 'package:senecapp/app_services.dart';
 import 'package:senecapp/data/api/api_client.dart';
 import 'package:senecapp/data/api/client_context.dart';
 import 'package:senecapp/data/auth/auth_service.dart';
+import 'package:senecapp/data/local/local_store.dart';
 import 'package:senecapp/data/location/location_service.dart';
 import 'package:senecapp/data/push/push_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -151,11 +152,13 @@ AppServices testServices({
   FakeQrCamera? camera,
   PushService? push,
   SharedPreferences? preferences,
+  LocalStore? store,
 }) {
   final fakeAuth = auth ?? FakeAuthService();
   return AppServices(
     auth: fakeAuth,
     preferences: preferences,
+    store: store ?? const NoLocalStore(),
     location: location ?? FakeLocationService(),
     qrCamera: (camera ?? FakeQrCamera()).build,
     push: push ?? const DisabledPushService(),
@@ -271,4 +274,19 @@ class FakePushService implements PushService {
 
   @override
   Stream<PushNotification> get arrivals => _arrivals.stream;
+}
+
+/// A connection that can be cut, in front of [FakeBackend]: offline, every
+/// request fails the way it does on a phone with no signal.
+class SwitchableConnection extends http.BaseClient {
+  SwitchableConnection(this._inner);
+
+  final http.Client _inner;
+
+  bool online = true;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) => online
+      ? _inner.send(request)
+      : Future.error(http.ClientException('No connection', request.url));
 }
