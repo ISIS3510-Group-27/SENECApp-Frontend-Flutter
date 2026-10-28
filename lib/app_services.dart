@@ -16,6 +16,7 @@ import 'data/local/local_store.dart';
 import 'data/local/offline_cache.dart';
 import 'data/local/sqlite_local_store.dart';
 import 'data/location/location_service.dart';
+import 'data/location/maps_service.dart';
 import 'data/push/push_service.dart';
 import 'data/reminders/reminder_notifications.dart';
 import 'data/repositories/catalog_repository.dart';
@@ -36,6 +37,7 @@ class AppServices {
     required this.api,
     this.preferences,
     this.location = const GeolocatorLocationService(),
+    this.maps = const GoogleMapsService(),
     this.qrCamera = mobileScannerCamera,
     Analytics? analytics,
     this.push = const DisabledPushService(),
@@ -55,6 +57,9 @@ class AppServices {
 
   /// The phone's GPS.
   final LocationService location;
+
+  /// External maps, opened only after an explicit action.
+  final MapsService maps;
 
   /// The phone's camera, for scanning check-in codes.
   final QrCameraBuilder qrCamera;

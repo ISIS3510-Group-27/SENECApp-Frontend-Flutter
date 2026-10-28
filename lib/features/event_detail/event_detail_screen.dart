@@ -28,6 +28,8 @@ import '../events/event_planning.dart';
 import '../rso_detail/rso_detail_screen.dart';
 import '../shell/track_screen.dart';
 import 'event_detail_view_model.dart';
+import 'event_directions_sheet.dart';
+import 'event_directions_view_model.dart';
 
 /// One event: when, where, who hosts it.
 ///
@@ -179,6 +181,28 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               _InfoRow(icon: Icons.calendar_today_rounded, text: event.date),
               _InfoRow(icon: Icons.schedule_rounded, text: event.timeRange),
               _InfoRow(icon: Icons.location_on_outlined, text: event.location),
+              if (!event.isCancelled) ...[
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  icon: const Icon(Icons.directions_walk_rounded),
+                  label: const Text('Get directions'),
+                  onPressed:
+                      EventDirectionsViewModel.destinationFor(event) == null
+                      ? null
+                      : () => EventDirectionsSheet.show(context, event),
+                ),
+                if (EventDirectionsViewModel.destinationFor(event) == null)
+                  Text(
+                    'Venue coordinates are not available yet.',
+                    style: AppTheme.body(
+                      size: 12,
+                      color: AppColors.mutedForeground,
+                    ),
+                  ),
+                const SizedBox(height: 12),
+              ],
               if (event.attendeeCount case final count?)
                 _InfoRow(
                   icon: Icons.people_outline_rounded,

@@ -13,6 +13,7 @@ import 'package:senecapp/data/auth/auth_service.dart';
 import 'package:senecapp/data/connectivity/connectivity_service.dart';
 import 'package:senecapp/data/local/local_store.dart';
 import 'package:senecapp/data/location/location_service.dart';
+import 'package:senecapp/data/location/maps_service.dart';
 import 'package:senecapp/data/push/push_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -150,6 +151,7 @@ AppServices testServices({
   FakeAuthService? auth,
   http.Client? backend,
   LocationService? location,
+  MapsService? maps,
   FakeQrCamera? camera,
   PushService? push,
   SharedPreferences? preferences,
@@ -163,6 +165,7 @@ AppServices testServices({
     store: store ?? const NoLocalStore(),
     connectivity: connectivity ?? const AlwaysConnected(),
     location: location ?? FakeLocationService(),
+    maps: maps ?? FakeMapsService(),
     qrCamera: (camera ?? FakeQrCamera()).build,
     push: push ?? const DisabledPushService(),
     api: ApiClient(
@@ -215,6 +218,27 @@ class FakeLocationService implements LocationService {
   @override
   Future<void> openSettings(LocationProblem problem) async =>
       settingsOpened.add(problem);
+}
+
+class FakeMapsService implements MapsService {
+  bool succeeds = true;
+  final List<MapCoordinates> places = [];
+  final List<({MapCoordinates origin, MapCoordinates destination})> routes = [];
+
+  @override
+  Future<bool> openPlace(MapCoordinates destination) async {
+    places.add(destination);
+    return succeeds;
+  }
+
+  @override
+  Future<bool> openWalkingRoute({
+    required MapCoordinates origin,
+    required MapCoordinates destination,
+  }) async {
+    routes.add((origin: origin, destination: destination));
+    return succeeds;
+  }
 }
 
 /// A camera that "sees" whatever a test passes to [scan].
