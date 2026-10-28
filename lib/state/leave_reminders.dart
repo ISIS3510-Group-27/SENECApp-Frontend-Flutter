@@ -63,7 +63,7 @@ class ReminderEvent {
 
 enum LeaveOrigin { here, previousClass, unknown }
 
-enum LeaveSkip { inClass, tooLate }
+enum LeaveSkip { inClass, tooLate, notificationsUnavailable }
 
 @immutable
 class LeavePlan {
@@ -108,11 +108,7 @@ LeavePlan planLeave({
   final classes = [
     for (final block in schedule)
       if (block.weekday == wall.weekday - 1)
-        (
-          block: block,
-          start: _at(day, block.start),
-          end: _at(day, block.end),
-        ),
+        (block: block, start: _at(day, block.start), end: _at(day, block.end)),
   ]..sort((a, b) => a.start.compareTo(b.start));
 
   for (final c in classes) {
@@ -147,7 +143,11 @@ LeavePlan planLeave({
 
   final walk = meters == null
       ? unknownWalk
-      : Duration(minutes: meters < 100 ? 0 : math.max(1, (meters / walkingMetersPerMinute).round()));
+      : Duration(
+          minutes: meters < 100
+              ? 0
+              : math.max(1, (meters / walkingMetersPerMinute).round()),
+        );
   var notifyAt = start.subtract(walk).subtract(leaveBuffer);
   var afterClass = false;
   for (final c in classes) {
@@ -172,7 +172,10 @@ LeavePlan planLeave({
   );
 }
 
-({String title, String body}) leaveMessage(ReminderEvent event, LeavePlan plan) {
+({String title, String body}) leaveMessage(
+  ReminderEvent event,
+  LeavePlan plan,
+) {
   final place = event.buildingName ?? 'the venue';
   final walk = plan.walkMinutes == 0
       ? "You're right next to $place"
@@ -196,7 +199,9 @@ double _distance(double lat1, double lon1, double lat2, double lon2) {
   final dLon = rad(lon2 - lon1);
   final a =
       math.pow(math.sin(dLat / 2), 2) +
-      math.cos(rad(lat1)) * math.cos(rad(lat2)) * math.pow(math.sin(dLon / 2), 2);
+      math.cos(rad(lat1)) *
+          math.cos(rad(lat2)) *
+          math.pow(math.sin(dLon / 2), 2);
   return 2 * radius * math.asin(math.sqrt(a));
 }
 
@@ -256,11 +261,18 @@ class LeaveReminders extends ChangeNotifier with WidgetsBindingObserver {
     _busy.add(event.id);
     notifyListeners();
     try {
-      await _notifications.requestPermission();
+      final allowed = await _notifications.requestPermission();
+      if (!allowed) {
+        return const LeavePlan(
+          walkMinutes: 0,
+          origin: LeaveOrigin.unknown,
+          skip: LeaveSkip.notificationsUnavailable,
+        );
+      }
       final plan = await _plan(reminder);
       if (plan.notifyAt != null) {
-        _events[event.id] = reminder;
         await _schedule(reminder, plan);
+        _events[event.id] = reminder;
         await _save();
       }
       return plan;
@@ -300,7 +312,8 @@ class LeaveReminders extends ChangeNotifier with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || _events.isEmpty) return;
     final last = _lastRefresh;
-    if (last == null || _clock().difference(last) > const Duration(minutes: 5)) {
+    if (last == null ||
+        _clock().difference(last) > const Duration(minutes: 5)) {
       unawaited(refresh());
     }
   }
@@ -308,11 +321,16 @@ class LeaveReminders extends ChangeNotifier with WidgetsBindingObserver {
   Future<LeavePlan> _plan(ReminderEvent event) async {
     final now = _clock();
     final schedule = await _orEmpty(_me.schedule);
-    final buildings = {for (final b in await _orEmpty(_catalog.buildings)) b.id: b};
+    final buildings = {
+      for (final b in await _orEmpty(_catalog.buildings)) b.id: b,
+    };
     ({double latitude, double longitude})? here;
     if (_locationOptIn() && event.startsAt.difference(now) <= gpsHorizon) {
       final result = await _location.current();
-      if (result case LocationResult(:final double latitude, :final double longitude)) {
+      if (result case LocationResult(
+        :final double latitude,
+        :final double longitude,
+      )) {
         here = (latitude: latitude, longitude: longitude);
       }
     }

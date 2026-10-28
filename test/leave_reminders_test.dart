@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
+import 'package:senecapp/data/models/campus_event.dart';
 import 'package:senecapp/data/models/catalog.dart';
 import 'package:senecapp/data/models/schedule_block.dart';
+import 'package:senecapp/data/reminders/reminder_notifications.dart';
 import 'package:senecapp/state/leave_reminders.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/fakes.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   final eventStart = DateTime.utc(2026, 10, 7, 23);
   final event = ReminderEvent(
     id: 7,
@@ -23,14 +30,13 @@ void main() {
   );
   final buildings = {ml.id: ml};
 
-  ScheduleBlock wednesday(int from, int to, {int? buildingId}) =>
-      ScheduleBlock(
-        weekday: 2,
-        start: TimeOfDay(hour: from, minute: 0),
-        end: TimeOfDay(hour: to, minute: 0),
-        title: 'Cálculo II',
-        buildingId: buildingId,
-      );
+  ScheduleBlock wednesday(int from, int to, {int? buildingId}) => ScheduleBlock(
+    weekday: 2,
+    start: TimeOfDay(hour: from, minute: 0),
+    end: TimeOfDay(hour: to, minute: 0),
+    title: 'Cálculo II',
+    buildingId: buildingId,
+  );
 
   test('far away in time, the walk starts at the previous class', () {
     final plan = planLeave(
@@ -109,4 +115,97 @@ void main() {
     expect(message.title, 'Time to leave for Doubles night');
     expect(message.body, startsWith('10 min walk to Centro Deportivo'));
   });
+
+  group('Reminder activation', () {
+    final campusEvent = CampusEvent(
+      id: 7,
+      rsoId: 1,
+      rsoName: 'Club',
+      title: 'Doubles night',
+      startsAt: DateTime.utc(2030, 1, 6, 23),
+      endsAt: DateTime.utc(2030, 1, 7, 1),
+      color: Colors.amber,
+    );
+
+    for (final allowed in [false, true]) {
+      test(
+        'permission $allowed determines activation and persistence',
+        () async {
+          SharedPreferences.setMockInitialValues({});
+          final prefs = await SharedPreferences.getInstance();
+          final notifications = _TestNotifications(allowed: allowed);
+          final services = testServices();
+          final reminders = LeaveReminders(
+            studentId: 1,
+            notifications: notifications,
+            location: FakeLocationService(),
+            me: services.me,
+            catalog: services.catalog,
+            locationOptIn: () => false,
+            preferences: prefs,
+            clock: () => DateTime.utc(2030, 1, 6, 12),
+          );
+          addTearDown(reminders.dispose);
+
+          final plan = await reminders.enable(campusEvent);
+
+          expect(reminders.isOn(7), allowed);
+          expect(reminders.isBusy(7), isFalse);
+          expect(notifications.scheduled, allowed ? [7] : isEmpty);
+          expect(prefs.containsKey('leave_reminders.student.1'), allowed);
+          expect(
+            plan.skip,
+            allowed ? isNull : LeaveSkip.notificationsUnavailable,
+          );
+        },
+      );
+    }
+
+    test(
+      'failed scheduling leaves reminder off and clears busy state',
+      () async {
+        final services = testServices();
+        final reminders = LeaveReminders(
+          studentId: 1,
+          notifications: _TestNotifications(allowed: true, fail: true),
+          location: FakeLocationService(),
+          me: services.me,
+          catalog: services.catalog,
+          locationOptIn: () => false,
+          clock: () => DateTime.utc(2030, 1, 6, 12),
+        );
+        addTearDown(reminders.dispose);
+
+        await expectLater(
+          reminders.enable(campusEvent),
+          throwsA(isA<PlatformException>()),
+        );
+
+        expect(reminders.isOn(7), isFalse);
+        expect(reminders.isBusy(7), isFalse);
+      },
+    );
+  });
+}
+
+class _TestNotifications extends DisabledReminderNotifications {
+  _TestNotifications({required this.allowed, this.fail = false});
+
+  final bool allowed;
+  final bool fail;
+  final List<int> scheduled = [];
+
+  @override
+  Future<bool> requestPermission() async => allowed;
+
+  @override
+  Future<void> schedule({
+    required int eventId,
+    required DateTime at,
+    required String title,
+    required String body,
+  }) async {
+    if (fail) throw PlatformException(code: 'schedule-failed');
+    scheduled.add(eventId);
+  }
 }

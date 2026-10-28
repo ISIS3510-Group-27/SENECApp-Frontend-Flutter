@@ -562,11 +562,21 @@ class _LeaveReminderCard extends StatelessWidget {
       await reminders.disable(event.id);
       return;
     }
-    final plan = await reminders.enable(event);
-    messenger.showSnackBar(SnackBar(content: Text(_explain(plan))));
+    try {
+      final plan = await reminders.enable(event);
+      messenger.showSnackBar(SnackBar(content: Text(_explain(plan))));
+    } on PlatformException {
+      messenger.showSnackBar(
+        const SnackBar(content: Text("Couldn't set the reminder. Try again.")),
+      );
+    }
   }
 
   static String _explain(LeavePlan plan) {
+    if (plan.skip == LeaveSkip.notificationsUnavailable) {
+      return 'Reminder not set: notifications are unavailable or permission '
+          'was denied.';
+    }
     if (plan.skip == LeaveSkip.inClass) {
       final title = plan.blockingClass?.title?.trim();
       final name = title == null || title.isEmpty ? 'a class' : title;
