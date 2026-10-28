@@ -29,7 +29,9 @@ class EventDetailViewModel extends ChangeNotifier {
   }) : _events = events,
        _me = me,
        _appState = appState,
-       _analytics = analytics;
+       _analytics = analytics,
+       // Opened earlier this session: shown at once while [load] refreshes it.
+       _event = events.recentDetail(eventId);
 
   final int eventId;
   final EventEntryPoint entryPoint;

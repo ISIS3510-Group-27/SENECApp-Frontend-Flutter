@@ -25,7 +25,9 @@ class RsoDetailViewModel extends ChangeNotifier {
     required Analytics analytics,
   }) : _groups = groups,
        _photos = photos,
-       _analytics = analytics;
+       _analytics = analytics,
+       // Opened earlier this session: shown at once while [load] refreshes it.
+       _detail = groups.recentDetail(rsoId);
 
   final int rsoId;
   final EntryPoint entryPoint;

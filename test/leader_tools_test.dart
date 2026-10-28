@@ -72,7 +72,10 @@ void main() {
   testWidgets('the form shows when members are free and BQ3', (tester) async {
     await openCreateEvent(tester);
 
-    expect(find.text('3 of 3 members free · past events 75% full'), findsOneWidget);
+    expect(
+      find.text('3 of 3 members free · past events 75% full'),
+      findsOneWidget,
+    );
     expect(find.textContaining('around 12:00'), findsOneWidget);
     expect(
       backend
@@ -133,6 +136,21 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Create event', skipOffstage: false), findsOneWidget);
+  });
+
+  testWidgets('My RSOs labels the groups the student leads', (tester) async {
+    // A member of groups 1, 2 and 5; admin of 1 only.
+    backend = FakeBackend(adminOf: {1});
+    await pumpApp(
+      tester,
+      testServices(auth: signedInAuth(), backend: backend.client),
+    );
+
+    await tester.tap(find.text('My RSOs').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Admin', skipOffstage: false), findsOneWidget);
+    expect(find.text('Member', skipOffstage: false), findsNWidgets(2));
   });
 
   test('insights parse from the backend', () {

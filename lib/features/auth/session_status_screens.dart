@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -6,7 +8,9 @@ import '../../core/assets/asset_catalog.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../state/connection_status.dart';
 import '../../state/session_controller.dart';
 
 /// Shown while the previous session is restored and the profile loads.
@@ -46,12 +50,37 @@ class SplashScreen extends StatelessWidget {
 
 /// The student is signed in but `GET /me` failed, usually because the phone
 /// is offline or the backend is down.
-class ProfileLoadFailedScreen extends StatelessWidget {
+class ProfileLoadFailedScreen extends StatefulWidget {
   const ProfileLoadFailedScreen({super.key});
+
+  @override
+  State<ProfileLoadFailedScreen> createState() =>
+      _ProfileLoadFailedScreenState();
+}
+
+class _ProfileLoadFailedScreenState extends State<ProfileLoadFailedScreen> {
+  StreamSubscription<void>? _reconnected;
+
+  @override
+  void initState() {
+    super.initState();
+    // Offline on the very first launch: try again by itself once connected.
+    final session = context.read<SessionController>();
+    _reconnected = context.read<ConnectionStatus?>()?.reconnected.listen(
+      (_) => session.retry(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _reconnected?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
+    final offline = !isOnline(context);
 
     return Scaffold(
       body: SafeArea(
@@ -60,20 +89,26 @@ class ProfileLoadFailedScreen extends StatelessWidget {
             shrinkWrap: true,
             padding: const EdgeInsets.all(kPageGutter),
             children: [
-              const Icon(
-                Icons.cloud_off_rounded,
+              Icon(
+                offline ? Icons.wifi_off_rounded : Icons.cloud_off_rounded,
                 size: 44,
                 color: AppColors.mutedForeground,
               ),
               const SizedBox(height: 16),
               Text(
-                "Can't load your profile",
+                offline ? "You're offline" : "Can't load your profile",
                 textAlign: TextAlign.center,
                 style: AppTheme.heading(size: 20),
               ),
               const SizedBox(height: 6),
               Text(
-                session.error ?? 'Something went wrong.',
+                // Only reachable with nothing saved yet: later launches open
+                // offline from the phone's copy.
+                offline
+                    ? 'The first time you sign in on this phone needs a '
+                          'connection. After that, SENECApp opens offline '
+                          'with what you saw last. This retries by itself.'
+                    : session.error ?? 'Something went wrong.',
                 textAlign: TextAlign.center,
                 style: AppTheme.body(
                   size: 13,

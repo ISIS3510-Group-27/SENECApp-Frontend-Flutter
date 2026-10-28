@@ -5,11 +5,14 @@ import '../../core/assets/asset_catalog.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/org_image.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/rso.dart';
+import '../../data/repositories/events_repository.dart';
+import '../../data/repositories/groups_repository.dart';
 import '../../state/app_state.dart';
 import '../rso_detail/rso_detail_screen.dart';
 import '../shell/home_shell.dart';
@@ -84,8 +87,21 @@ class MyRsosScreen extends StatelessWidget {
             child: SectionLabel(text: 'Active Memberships'),
           ),
           const SizedBox(height: 12),
+          const SavedCopyNote(
+            dataKeys: [GroupsRepository.mineKey, EventsRepository.attendedKey],
+            message:
+                'Your groups and their pages stay available offline; joining '
+                'or leaving one needs a connection.',
+            padding: EdgeInsets.fromLTRB(kPageGutter, 0, kPageGutter, 12),
+          ),
           if (state.myGroupsError case final error? when joined == null)
-            ErrorBlock(message: error, onRetry: state.refreshMemberships)
+            ErrorBlock(
+              message: error,
+              onRetry: state.refreshMemberships,
+              offlineMessage:
+                  'Your memberships load the first time you open the app '
+                  'online, then stay on this phone.',
+            )
           else if (joined == null)
             const LoadingBlock()
           else if (joined.isEmpty)
@@ -210,7 +226,8 @@ class _MembershipCard extends StatelessWidget {
                     ),
                     child: Text(
                       switch (rso.reviewStatus) {
-                        ReviewStatus.approved => 'Member',
+                        ReviewStatus.approved =>
+                          rso.isAdmin ? 'Admin' : 'Member',
                         ReviewStatus.pending => 'Pending review',
                         ReviewStatus.rejected => 'Not approved',
                       },

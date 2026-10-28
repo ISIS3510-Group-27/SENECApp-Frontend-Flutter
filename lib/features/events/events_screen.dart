@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -6,12 +8,15 @@ import '../../core/format/dates.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/entry_point.dart';
+import '../../data/repositories/events_repository.dart';
 import '../../state/app_state.dart';
+import '../../state/connection_status.dart';
 import '../check_in/check_in_screen.dart';
 import '../event_detail/event_detail_screen.dart';
 import '../free_now/free_now_screen.dart';
@@ -40,14 +45,22 @@ class _EventsScreenState extends State<EventsScreen> {
     analytics: context.read<AppServices>().analytics,
   );
 
+  StreamSubscription<void>? _reconnected;
+
   @override
   void initState() {
     super.initState();
     _vm.start();
+    // Back online: every list is fetched again, so the saved copies (and any
+    // list that couldn't load) are replaced by live ones.
+    _reconnected = context.read<ConnectionStatus?>()?.reconnected.listen(
+      (_) => _vm.reloadAll(),
+    );
   }
 
   @override
   void dispose() {
+    _reconnected?.cancel();
     _vm.dispose();
     super.dispose();
   }
@@ -272,8 +285,23 @@ class _EventsScreenState extends State<EventsScreen> {
             ),
           ],
           const SizedBox(height: 20),
+          SavedCopyNote(
+            dataKeys: [EventsRepository.listKey(mine: vm.joinedOnly)],
+            // These filters run on the phone, over the saved events.
+            message:
+                'Search, dates, Saved and the itinerary still work offline.',
+            padding: const EdgeInsets.fromLTRB(kPageGutter, 0, kPageGutter, 12),
+          ),
           if (error != null)
-            ErrorBlock(message: error, onRetry: vm.reload)
+            ErrorBlock(
+              message: error,
+              onRetry: vm.reload,
+              offlineMessage: vm.joinedOnly
+                  ? "Your groups' events load the first time you open this "
+                        'list online, then stay on this phone.'
+                  : 'Upcoming events load the first time you open Events '
+                        'online, then stay on this phone.',
+            )
           else if (events == null)
             const LoadingBlock()
           else if (visibleEvents!.isEmpty)
@@ -624,11 +652,28 @@ class _MetaLine extends StatelessWidget {
 class _FreeNowCard extends StatelessWidget {
   const _FreeNowCard();
 
+  /// Suggestions are ranked live from where the student is right now, so
+  /// there is nothing worth saving for later.
+  Future<void> _open(BuildContext context) async {
+    final online = await ensureOnline(
+      context,
+      title: 'Free right now needs a connection',
+      message:
+          'It ranks events by your free block and where you are right now. '
+          'Meanwhile, the events below and your saved ones are on this phone.',
+    );
+    if (online && context.mounted) {
+      await Navigator.of(context).push(FreeNowScreen.route());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final online = isOnline(context);
+
     return AppCard(
-      onTap: () => Navigator.of(context).push(FreeNowScreen.route()),
-      border: AppColors.accent.withValues(alpha: 0.35),
+      onTap: () => _open(context),
+      border: AppColors.accent.withValues(alpha: online ? 0.35 : 0.15),
       child: Row(
         children: [
           const TintedIconTile(
@@ -644,7 +689,9 @@ class _FreeNowCard extends StatelessWidget {
                 Text('Free right now?', style: AppTheme.heading(size: 15)),
                 const SizedBox(height: 2),
                 Text(
-                  'Events nearby that fit before your next class',
+                  online
+                      ? 'Events nearby that fit before your next class'
+                      : 'Needs a connection to see where you are now',
                   style: AppTheme.body(
                     size: 12,
                     color: AppColors.mutedForeground,

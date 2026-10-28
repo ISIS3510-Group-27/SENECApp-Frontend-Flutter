@@ -10,6 +10,7 @@ import '../../data/analytics/analytics.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/check_in.dart';
 import '../../state/app_state.dart';
+import '../../state/connection_status.dart';
 import '../shell/track_screen.dart';
 import 'check_in_view_model.dart';
 
@@ -47,6 +48,8 @@ class _CheckInScreenState extends State<CheckInScreen> {
       location: services.location,
       locationOptIn: () => context.read<AppState>().student.locationOptIn,
       onCheckedIn: () => context.read<AppState>().refreshAttendance(),
+      isOnline: () => context.read<ConnectionStatus?>()?.online ?? true,
+      reconnected: context.read<ConnectionStatus?>()?.reconnected,
       analytics: services.analytics,
     );
   }();
@@ -118,6 +121,11 @@ class _CheckInScreenState extends State<CheckInScreen> {
               )
             else if (vm.refusal case final refusal?)
               _Refused(message: refusal, onRetry: vm.scanAgain)
+            else if (vm.waitingForConnection)
+              _WaitingForConnection(
+                sending: vm.submitting,
+                onCancel: vm.cancelPending,
+              )
             else ...[
               _Viewfinder(
                 busy: vm.submitting,
@@ -271,6 +279,53 @@ class _Success extends StatelessWidget {
         const SizedBox(height: 28),
         PrimaryButton(label: 'Done', onPressed: onDone),
       ],
+    );
+  }
+}
+
+/// The scan is kept on the phone until there's a connection to send it.
+class _WaitingForConnection extends StatelessWidget {
+  const _WaitingForConnection({required this.sending, required this.onCancel});
+
+  final bool sending;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.wifi_off_rounded, color: AppColors.accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  sending ? 'Sending your check-in...' : 'Scan saved',
+                  style: AppTheme.heading(size: 16),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "There's no connection right now. Your check-in, with where you "
+            "are now, goes out by itself as soon as you're back online. Keep "
+            'this screen open.',
+            style: AppTheme.body(
+              size: 13,
+              height: 1.45,
+              color: AppColors.mutedForeground,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: sending ? null : onCancel,
+            child: const Text('Cancel and scan again'),
+          ),
+        ],
+      ),
     );
   }
 }

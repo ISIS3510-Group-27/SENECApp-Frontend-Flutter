@@ -5,6 +5,7 @@ import '../../app_services.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
@@ -86,6 +87,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   });
 
   Future<void> _save() async {
+    // The classes stay as edited: only the upload waits.
+    final online = await ensureOnline(
+      context,
+      title: 'Saving needs a connection',
+      message:
+          'Your changes stay here. Save them when you are back online, so '
+          'Free right now and leave reminders use your new classes.',
+    );
+    if (!online || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _saving = true);
     try {
@@ -194,7 +204,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 child: blocks == null
                     ? (_error == null
                           ? const LoadingBlock()
-                          : ErrorBlock(message: _error!, onRetry: _load))
+                          : ErrorBlock(
+                              message: _error!,
+                              onRetry: _load,
+                              offlineMessage:
+                                  'Your classes load the first time you open '
+                                  'this online, then stay on this phone.',
+                            ))
                     : ListView(
                         padding: const EdgeInsets.fromLTRB(
                           kPageGutter,

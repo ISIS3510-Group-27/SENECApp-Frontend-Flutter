@@ -5,6 +5,7 @@ import '../../core/assets/asset_catalog.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/selectable_chip.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
@@ -407,6 +408,16 @@ class _LocationRow extends StatelessWidget {
   const _LocationRow();
 
   Future<void> _set(BuildContext context, bool optIn) async {
+    // The consent lives on the backend: it's what stops it from using the
+    // phone's position at all, so it can't change offline.
+    final online = await ensureOnline(
+      context,
+      title: 'Changing this needs a connection',
+      message:
+          'Your choice is stored on SENECApp, which is what stops it from '
+          "using your location. Try again when you're back online.",
+    );
+    if (!online || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       await context.read<AppState>().setLocationOptIn(optIn);
@@ -462,7 +473,10 @@ class _OutdoorRow extends StatelessWidget {
         'Turns on by itself in direct sunlight (light sensor)',
     };
 
-    return Padding(
+    // Full width like the ListTiles around it; otherwise the card's Column
+    // centers it and a short subtitle pushes the whole row inwards.
+    return Container(
+      width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

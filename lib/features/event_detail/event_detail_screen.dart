@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -8,14 +10,18 @@ import '../../core/format/dates.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
+import '../../data/local/offline_cache.dart';
 import '../../data/models/campus_event.dart';
 import '../../data/models/check_in.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/schedule_block.dart';
+import '../../data/repositories/events_repository.dart';
 import '../../state/app_state.dart';
+import '../../state/connection_status.dart';
 import '../../state/leave_reminders.dart';
 import '../check_in/check_in_screen.dart';
 import '../events/event_planning.dart';
@@ -76,14 +82,25 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     );
   }();
 
+  StreamSubscription<void>? _reconnected;
+
   @override
   void initState() {
     super.initState();
     _vm.load();
+    // Back online: a page shown from the phone's copy is fetched live.
+    final freshness = context.read<DataFreshness?>();
+    _reconnected = context.read<ConnectionStatus?>()?.reconnected.listen((_) {
+      final saved = freshness?.cachedAt(
+        EventsRepository.detailKey(widget.eventId),
+      );
+      if (_vm.event == null || saved != null) _vm.load();
+    });
   }
 
   @override
   void dispose() {
+    _reconnected?.cancel();
     _vm.dispose();
     super.dispose();
   }
@@ -141,8 +158,21 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             if (event == null)
               vm.error == null
                   ? const LoadingBlock()
-                  : ErrorBlock(message: vm.error!, onRetry: vm.load)
+                  : ErrorBlock(
+                      message: vm.error!,
+                      onRetry: vm.load,
+                      offlineMessage:
+                          "This event's page loads the first time you open it "
+                          'online, then stays on this phone.',
+                    )
             else ...[
+              SavedCopyNote(
+                dataKeys: [EventsRepository.detailKey(event.id)],
+                message:
+                    'Saving it, copying its details, the class check and the '
+                    'leave reminder all work offline.',
+                padding: const EdgeInsets.only(top: 16),
+              ),
               const SizedBox(height: 20),
               _Heading(event: event),
               const SizedBox(height: 20),
@@ -532,11 +562,21 @@ class _LeaveReminderCard extends StatelessWidget {
       await reminders.disable(event.id);
       return;
     }
-    final plan = await reminders.enable(event);
-    messenger.showSnackBar(SnackBar(content: Text(_explain(plan))));
+    try {
+      final plan = await reminders.enable(event);
+      messenger.showSnackBar(SnackBar(content: Text(_explain(plan))));
+    } on PlatformException {
+      messenger.showSnackBar(
+        const SnackBar(content: Text("Couldn't set the reminder. Try again.")),
+      );
+    }
   }
 
   static String _explain(LeavePlan plan) {
+    if (plan.skip == LeaveSkip.notificationsUnavailable) {
+      return 'Reminder not set: notifications are unavailable or permission '
+          'was denied.';
+    }
     if (plan.skip == LeaveSkip.inClass) {
       final title = plan.blockingClass?.title?.trim();
       final name = title == null || title.isEmpty ? 'a class' : title;

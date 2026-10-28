@@ -9,6 +9,7 @@ import 'features/auth/sign_in_screen.dart';
 import 'features/auth/verify_email_screen.dart';
 import 'features/shell/home_shell.dart';
 import 'state/app_state.dart';
+import 'state/connection_status.dart';
 import 'state/leave_reminders.dart';
 import 'state/outdoor_mode.dart';
 import 'state/push_registration.dart';
@@ -26,11 +27,16 @@ class SenecApp extends StatelessWidget {
       providers: [
         Provider.value(value: services),
         ChangeNotifierProvider(
+          create: (_) => ConnectionStatus(services.connectivity)..start(),
+        ),
+        ChangeNotifierProvider.value(value: services.offline.freshness),
+        ChangeNotifierProvider(
           create: (_) => SessionController(
             auth: services.auth,
             me: services.me,
             api: services.api,
             analytics: services.analytics,
+            offline: services.offline,
             push: PushRegistration(
               push: services.push,
               notifications: services.notifications,
@@ -53,10 +59,7 @@ class SenecApp extends StatelessWidget {
         theme: AppTheme.dark,
         home: const _SessionGate(),
         builder: (context, child) => PhoneFrame(
-          child: OutdoorView(
-            mode: context.read<OutdoorMode>(),
-            child: child!,
-          ),
+          child: OutdoorView(mode: context.read<OutdoorMode>(), child: child!),
         ),
       ),
     );

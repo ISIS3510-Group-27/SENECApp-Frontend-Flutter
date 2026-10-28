@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
+import 'offline.dart';
 
 /// Stands in for a list while it loads.
 class LoadingBlock extends StatelessWidget {
@@ -27,13 +28,25 @@ class LoadingBlock extends StatelessWidget {
 /// Stands in for a list that couldn't be loaded, with a way to try again.
 /// Laid out like the screens' empty states.
 class ErrorBlock extends StatelessWidget {
-  const ErrorBlock({super.key, required this.message, required this.onRetry});
+  const ErrorBlock({
+    super.key,
+    required this.message,
+    required this.onRetry,
+    this.offlineMessage,
+  });
 
   final String message;
   final VoidCallback onRetry;
 
+  /// What this screen needs the connection for, shown instead of [message]
+  /// when the phone is offline and nothing was saved for it yet. The screen
+  /// reloads by itself once the connection is back.
+  final String? offlineMessage;
+
   @override
   Widget build(BuildContext context) {
+    final offline = offlineMessage != null && !isOnline(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: kPageGutter,
@@ -41,16 +54,19 @@ class ErrorBlock extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Icon(
-            Icons.cloud_off_rounded,
+          Icon(
+            offline ? Icons.wifi_off_rounded : Icons.cloud_off_rounded,
             size: 40,
             color: AppColors.mutedForeground,
           ),
           const SizedBox(height: 12),
-          Text("Couldn't load this", style: AppTheme.heading(size: 16)),
+          Text(
+            offline ? "You're offline" : "Couldn't load this",
+            style: AppTheme.heading(size: 16),
+          ),
           const SizedBox(height: 4),
           Text(
-            message,
+            offline ? offlineMessage! : message,
             textAlign: TextAlign.center,
             style: AppTheme.body(size: 13, color: AppColors.mutedForeground),
           ),

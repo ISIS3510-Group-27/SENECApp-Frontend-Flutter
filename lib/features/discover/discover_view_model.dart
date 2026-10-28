@@ -22,13 +22,18 @@ class DiscoverViewModel extends ChangeNotifier {
     required RecommendationsRepository recommendations,
     required Analytics analytics,
     this.debounce = const Duration(milliseconds: 400),
+    bool Function()? isOnline,
   }) : _groups = groups,
        _recommendationsRepository = recommendations,
-       _analytics = analytics;
+       _analytics = analytics,
+       _isOnline = isOnline ?? _alwaysOnline;
+
+  static bool _alwaysOnline() => true;
 
   final GroupsRepository _groups;
   final RecommendationsRepository _recommendationsRepository;
   final Analytics _analytics;
+  final bool Function() _isOnline;
 
   /// How long typing has to pause before the search is sent.
   final Duration debounce;
@@ -40,6 +45,7 @@ class DiscoverViewModel extends ChangeNotifier {
   bool _recommendationsFailed = false;
   String? _error;
   bool _loading = false;
+  bool _searchNeedsConnection = false;
   bool _disposed = false;
 
   Timer? _debounce;
@@ -58,6 +64,10 @@ class DiscoverViewModel extends ChangeNotifier {
   bool get recommendationsFailed => _recommendationsFailed;
   String? get error => _error;
   bool get loading => _loading;
+
+  /// The student searched or filtered while offline. Searching runs on the
+  /// backend, so the list keeps the groups saved on the phone instead.
+  bool get searchNeedsConnection => _searchNeedsConnection;
 
   /// Whether the first answer (results or an error) has arrived.
   bool get ready => _results != null || _error != null;
@@ -92,6 +102,13 @@ class DiscoverViewModel extends ChangeNotifier {
     _debounce?.cancel();
     final searchId = ++_searchId;
     final filters = _filters;
+    // Offline, a search can only fail: say so at once instead of waiting.
+    _searchNeedsConnection = filters.isSearch && !_isOnline();
+    if (_searchNeedsConnection) {
+      _loading = false;
+      notifyListeners();
+      return;
+    }
     _loading = true;
     notifyListeners();
     try {

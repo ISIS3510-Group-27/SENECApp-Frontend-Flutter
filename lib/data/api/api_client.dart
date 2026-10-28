@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
+import '../../core/concurrency/background_json.dart';
 import '../auth/auth_service.dart';
 import 'client_context.dart';
 
@@ -18,6 +19,10 @@ class ApiException implements Exception {
   final String message;
 
   bool get isNetworkError => statusCode == null;
+
+  /// The backend couldn't answer: no connection, a timeout, or the server
+  /// itself failing (5xx). What the phone has stored is the best answer then.
+  bool get isUnreachable => statusCode == null || statusCode! >= 500;
 
   @override
   String toString() => 'ApiException($statusCode): $message';
@@ -125,10 +130,12 @@ class ApiClient {
       if (response.statusCode == 401) onUnauthorized?.call();
     }
 
-    final text = utf8.decode(response.bodyBytes);
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return text.isEmpty ? null : jsonDecode(text);
+      // Long lists are decoded on a background isolate, so the screen keeps
+      // drawing while they're parsed.
+      return BackgroundJson.decodeBytes(response.bodyBytes);
     }
+    final text = utf8.decode(response.bodyBytes);
     throw ApiException(response.statusCode, _errorMessage(response, text));
   }
 
@@ -140,7 +147,17 @@ class ApiClient {
       ..headers.addAll(_context.headers)
       ..headers['Accept'] = 'application/json';
 
-    final token = await _auth.idToken(forceRefresh: refreshToken);
+    final String? token;
+    try {
+      token = await _auth.idToken(forceRefresh: refreshToken);
+    } on Exception {
+      // The hourly token refresh needs the network too: offline it fails
+      // before the request is even sent.
+      throw const ApiException(
+        null,
+        "Can't reach SENECApp. Check your connection.",
+      );
+    }
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
 
     try {

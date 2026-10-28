@@ -6,6 +6,7 @@ import '../core/config/app_config.dart';
 import '../data/analytics/analytics.dart';
 import '../data/api/api_client.dart';
 import '../data/auth/auth_service.dart';
+import '../data/local/offline_cache.dart';
 import '../data/models/student_profile.dart';
 import '../data/repositories/me_repository.dart';
 import 'push_registration.dart';
@@ -40,10 +41,12 @@ class SessionController extends ChangeNotifier {
     required ApiClient api,
     Analytics? analytics,
     PushRegistration? push,
+    OfflineCache? offline,
   }) : _auth = auth,
        _me = me,
        _analytics = analytics,
-       _push = push {
+       _push = push,
+       _offline = offline {
     api.onUnauthorized = _onUnauthorized;
   }
 
@@ -51,6 +54,10 @@ class SessionController extends ChangeNotifier {
   final MeRepository _me;
   final Analytics? _analytics;
   final PushRegistration? _push;
+
+  /// The account's copy of what it last saw: opened before the profile is
+  /// fetched, so the app can start offline, and deleted at sign-out.
+  final OfflineCache? _offline;
 
   SessionStatus _status = SessionStatus.starting;
   AuthAccount? _account;
@@ -128,6 +135,7 @@ class SessionController extends ChangeNotifier {
   Future<void> retry() => _loadProfile();
 
   Future<void> signOut({String? reason}) async {
+    _offline?.resetSession();
     // Events still queued are sent with this student's token, so the next
     // account to sign in on this phone doesn't inherit them. Best effort.
     try {
@@ -141,7 +149,14 @@ class SessionController extends ChangeNotifier {
     } on Object {
       // The backend drops the token once FCM reports it dead.
     }
+    // The next student on this phone mustn't see this one's groups or inbox.
+    try {
+      await _offline?.store.wipe();
+    } on Object {
+      // A copy that can't be deleted is overwritten at the next sign-in.
+    }
     await _auth.signOut();
+    _offline?.resetSession();
     _account = null;
     _student = null;
     _error = reason;
@@ -149,9 +164,16 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> _continueWith(AuthAccount? account) async {
+    _offline?.resetSession();
     _account = account;
     if (account == null) return _setStatus(SessionStatus.signedOut);
     if (!account.emailVerified) return _setStatus(SessionStatus.unverified);
+    try {
+      await _offline?.store.open(account.email);
+    } on Object catch (e) {
+      // Without a copy the app still works online, as it always did.
+      _analytics?.error(e, screen: Screens.login);
+    }
     await _loadProfile();
   }
 

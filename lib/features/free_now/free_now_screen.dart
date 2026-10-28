@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -7,6 +9,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
 import '../../core/widgets/badges.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
@@ -14,6 +17,7 @@ import '../../data/location/location_service.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/free_now.dart';
 import '../../state/app_state.dart';
+import '../../state/connection_status.dart';
 import '../event_detail/event_detail_screen.dart';
 import '../schedule/schedule_screen.dart';
 import '../shell/track_screen.dart';
@@ -43,17 +47,25 @@ class _FreeNowScreenState extends State<FreeNowScreen> {
       location: services.location,
       appState: context.read<AppState>(),
       analytics: services.analytics,
+      isOnline: () => isOnline(context, listen: false),
     );
   }();
+
+  StreamSubscription<void>? _reconnected;
 
   @override
   void initState() {
     super.initState();
     _vm.start();
+    // Back online: load what couldn't be loaded.
+    _reconnected = context.read<ConnectionStatus?>()?.reconnected.listen((_) {
+      if (_vm.needsConnection) _vm.load();
+    });
   }
 
   @override
   void dispose() {
+    _reconnected?.cancel();
     _vm.dispose();
     super.dispose();
   }
@@ -102,6 +114,8 @@ class _FreeNowScreenState extends State<FreeNowScreen> {
               const SizedBox(height: 20),
               if (vm.askingConsent)
                 _ConsentCard(onAllow: _allowLocation, onSkip: vm.load)
+              else if (vm.needsConnection && result == null)
+                const _NeedsConnection()
               else if (result == null)
                 vm.error == null
                     ? const LoadingBlock()
@@ -115,6 +129,12 @@ class _FreeNowScreenState extends State<FreeNowScreen> {
                       color: AppColors.accent,
                       backgroundColor: Colors.transparent,
                     ),
+                  ),
+                if (vm.needsConnection || !isOnline(context))
+                  const OfflineNote(
+                    'These suggestions are from before you went offline. '
+                    "They'll update when you're back online.",
+                    padding: EdgeInsets.only(bottom: 12),
                   ),
                 _FreeBlockBanner(result: result),
                 const SizedBox(height: 14),
@@ -167,6 +187,49 @@ class _FreeNowScreenState extends State<FreeNowScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Offline with nothing loaded yet: why, and where to go instead.
+class _NeedsConnection extends StatelessWidget {
+  const _NeedsConnection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.wifi_off_rounded,
+            size: 40,
+            color: AppColors.mutedForeground,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Free right now needs a connection',
+            textAlign: TextAlign.center,
+            style: AppTheme.heading(size: 16),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'It ranks events by your free block and where you are right now. '
+            "It'll load by itself when you're back online.",
+            textAlign: TextAlign.center,
+            style: AppTheme.body(
+              size: 13,
+              height: 1.45,
+              color: AppColors.mutedForeground,
+            ),
+          ),
+          const SizedBox(height: 16),
+          PrimaryButton.secondary(
+            label: 'Browse saved events',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
       ),
     );
   }

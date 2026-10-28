@@ -101,6 +101,7 @@ class FakeBackend {
     'next_event': null,
     'is_member': true,
     'is_saved': false,
+    'my_role': 'admin',
   };
 
   static final bestSlot = DateTime.utc(_now.year, _now.month, _now.day + 2, 17);
@@ -401,6 +402,11 @@ class FakeBackend {
             },
       'is_member': memberIds.contains(id),
       'is_saved': savedIds.contains(id),
+      'my_role': adminOf.contains(id)
+          ? 'admin'
+          : memberIds.contains(id)
+          ? 'member'
+          : null,
       if (detail) ...{
         'founded_year': 2015,
         'contact_email': 'hola@uniandes.edu.co',
@@ -416,11 +422,6 @@ class FakeBackend {
         'upcoming_events': [
           for (final e in events) _eventJson(e.$1, withGroup: false),
         ],
-        'my_role': adminOf.contains(id)
-            ? 'admin'
-            : memberIds.contains(id)
-            ? 'member'
-            : null,
         'admin_request_status': requestedAdmin.contains(id) ? 'pending' : null,
         'pending_admin_requests': adminOf.contains(id)
             ? adminRequests[id]?.length ?? 0

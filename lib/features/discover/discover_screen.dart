@@ -9,6 +9,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
 import '../../core/widgets/badges.dart';
+import '../../core/widgets/offline.dart';
 import '../../core/widgets/org_image.dart';
 import '../../core/widgets/rso_list_tile.dart';
 import '../../core/widgets/selectable_chip.dart';
@@ -19,7 +20,9 @@ import '../../data/models/group_filters.dart';
 import '../../data/models/recommendation.dart';
 import '../../data/models/rso.dart';
 import '../../data/models/rso_category.dart';
+import '../../data/repositories/groups_repository.dart';
 import '../../state/app_state.dart';
+import '../../state/connection_status.dart';
 import '../notifications/notifications_screen.dart';
 import '../recommendations/recommendations_screen.dart';
 import '../rso_detail/rso_detail_screen.dart';
@@ -61,17 +64,26 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       recommendations: services.recommendations,
       analytics: services.analytics,
       debounce: DiscoverScreen.searchDebounce,
+      isOnline: () => isOnline(context, listen: false),
     );
   }();
+
+  StreamSubscription<void>? _reconnected;
 
   @override
   void initState() {
     super.initState();
     _vm.start();
+    // Back online: the saved list (or the search that had to wait) is
+    // replaced by a live one, and recommendations come back.
+    _reconnected = context.read<ConnectionStatus?>()?.reconnected.listen(
+      (_) => _vm.refresh(),
+    );
   }
 
   @override
   void dispose() {
+    _reconnected?.cancel();
     _vm.dispose();
     _searchController.dispose();
     super.dispose();
@@ -171,6 +183,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               ],
             ),
           ),
+          if (vm.searchNeedsConnection)
+            const OfflineNote(
+              'Search and filters need a connection. Meanwhile, here are the '
+              'organizations saved on this phone.',
+              padding: EdgeInsets.fromLTRB(kPageGutter, 12, kPageGutter, 0),
+            ),
           if (browsing && recommended.isNotEmpty) ...[
             const SizedBox(height: 20),
             Padding(
@@ -227,8 +245,21 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          const SavedCopyNote(
+            dataKeys: [GroupsRepository.browseKey],
+            message:
+                'Recommendations, search and joining come back when '
+                "you're online.",
+            padding: EdgeInsets.fromLTRB(kPageGutter, 0, kPageGutter, 12),
+          ),
           if (vm.error case final error?)
-            ErrorBlock(message: error, onRetry: vm.search)
+            ErrorBlock(
+              message: error,
+              onRetry: vm.search,
+              offlineMessage:
+                  'Organizations load the first time you open Discover '
+                  'online. After that they stay on this phone.',
+            )
           else if (results == null)
             const LoadingBlock()
           else if (results.items.isEmpty)

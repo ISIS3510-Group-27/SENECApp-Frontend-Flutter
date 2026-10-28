@@ -10,6 +10,8 @@ import 'package:senecapp/app_services.dart';
 import 'package:senecapp/data/api/api_client.dart';
 import 'package:senecapp/data/api/client_context.dart';
 import 'package:senecapp/data/auth/auth_service.dart';
+import 'package:senecapp/data/connectivity/connectivity_service.dart';
+import 'package:senecapp/data/local/local_store.dart';
 import 'package:senecapp/data/location/location_service.dart';
 import 'package:senecapp/data/push/push_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -151,11 +153,15 @@ AppServices testServices({
   FakeQrCamera? camera,
   PushService? push,
   SharedPreferences? preferences,
+  LocalStore? store,
+  ConnectivityService? connectivity,
 }) {
   final fakeAuth = auth ?? FakeAuthService();
   return AppServices(
     auth: fakeAuth,
     preferences: preferences,
+    store: store ?? const NoLocalStore(),
+    connectivity: connectivity ?? const AlwaysConnected(),
     location: location ?? FakeLocationService(),
     qrCamera: (camera ?? FakeQrCamera()).build,
     push: push ?? const DisabledPushService(),
@@ -271,4 +277,58 @@ class FakePushService implements PushService {
 
   @override
   Stream<PushNotification> get arrivals => _arrivals.stream;
+}
+
+/// A connection that can be cut, in front of [FakeBackend]: offline, every
+/// request fails the way it does on a phone with no signal.
+class SwitchableConnection extends http.BaseClient {
+  SwitchableConnection(this._inner);
+
+  final http.Client _inner;
+
+  bool online = true;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) => online
+      ? _inner.send(request)
+      : Future.error(http.ClientException('No connection', request.url));
+}
+
+/// The phone's network, switched on and off by tests.
+class FakeConnectivity implements ConnectivityService {
+  final _changes = StreamController<bool>.broadcast();
+
+  bool connected = true;
+
+  void set({required bool connected}) {
+    this.connected = connected;
+    _changes.add(connected);
+  }
+
+  @override
+  Future<bool> isConnected() async => connected;
+
+  @override
+  Stream<bool> get changes => _changes.stream;
+}
+
+/// No network and no backend: what a phone in airplane mode sees.
+class Offline {
+  Offline(this.backend)
+    : connection = SwitchableConnection(backend.client),
+      network = FakeConnectivity();
+
+  final FakeBackend backend;
+  final SwitchableConnection connection;
+  final FakeConnectivity network;
+
+  void cut() {
+    connection.online = false;
+    network.set(connected: false);
+  }
+
+  void restore() {
+    connection.online = true;
+    network.set(connected: true);
+  }
 }

@@ -1,8 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../data/local/cover_cache.dart';
 import '../../data/models/rso.dart';
 import '../assets/asset_catalog.dart';
-import '../config/app_config.dart';
 import '../theme/app_colors.dart';
 
 /// An organization's photo, with a graceful stand-in when there isn't one.
@@ -22,30 +23,28 @@ class OrgImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fallback = _Fallback(rso: rso, iconSize: iconSize);
-    // A photo the group uploaded beats the bundled art.
-    final uploaded =
-        (rso.imageUrl?.startsWith('/media/') ?? false) ||
-        (rso.imageUrl?.contains('firebasestorage') ?? false);
 
-    if (AssetCatalog.orgImage(rso.imageSlug) case final path? when !uploaded) {
+    // An uploaded photo, from the phone's copy when it's there.
+    if (CoverCache.urlFor(rso) case final url?) {
+      return CachedNetworkImage(
+        imageUrl: url,
+        cacheManager: CoverCache.shared,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        // The gradient shows while the photo downloads, and stays if it fails
+        // (offline, and never downloaded before).
+        placeholder: (_, _) => fallback,
+        errorWidget: (_, _, _) => fallback,
+      );
+    }
+
+    if (AssetCatalog.orgImage(rso.imageSlug) case final path?) {
       return Image.asset(
         path,
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
-        errorBuilder: (_, _, _) => fallback,
-      );
-    }
-
-    if (rso.imageUrl case final url?) {
-      return Image.network(
-        AppConfig.resolveImageUrl(url),
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        // The gradient shows while the photo downloads, and stays if it fails.
-        frameBuilder: (_, child, frame, wasSynchronouslyLoaded) =>
-            frame == null && !wasSynchronouslyLoaded ? fallback : child,
         errorBuilder: (_, _, _) => fallback,
       );
     }
