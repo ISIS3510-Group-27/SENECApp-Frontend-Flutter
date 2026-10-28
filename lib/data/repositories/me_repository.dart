@@ -29,8 +29,11 @@ class MeRepository {
 
   /// Turns the use of the phone's location for suggestions on or off.
   Future<StudentProfile> setLocationOptIn(bool optIn) async {
+    final session = _cache.sessionVersion;
     final json = await _api.patch('/me', body: {'location_opt_in': optIn});
-    await _cache.keep(() => _cache.store.saveDocument(profileKey, json));
+    if (session == _cache.sessionVersion) {
+      await _cache.keep(() => _cache.store.saveDocument(profileKey, json));
+    }
     return _profile(json);
   }
 
@@ -45,13 +48,16 @@ class MeRepository {
 
   /// Replaces the whole schedule with [blocks]; returns it as saved.
   Future<List<ScheduleBlock>> saveSchedule(List<ScheduleBlock> blocks) async {
+    final session = _cache.sessionVersion;
     final json = await _api.put(
       '/me/schedule',
       body: {
         'blocks': [for (final b in blocks) b.toJson()],
       },
     );
-    await _cache.keep(() => _cache.store.saveDocument(scheduleKey, json));
+    if (session == _cache.sessionVersion) {
+      await _cache.keep(() => _cache.store.saveDocument(scheduleKey, json));
+    }
     return _blocks(json);
   }
 

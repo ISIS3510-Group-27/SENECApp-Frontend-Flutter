@@ -69,8 +69,9 @@ class SqliteLocalStore implements LocalStore {
 
   @override
   Future<void> saveGroups(String name, List<Object?> groups) async {
+    final database = _db;
     final texts = await BackgroundJson.encodeAll(groups);
-    await _write((txn, now) async {
+    await _writeTo(database, (txn, now) async {
       final batch = txn.batch();
       for (final (i, item) in groups.indexed) {
         final group = item! as Map<String, dynamic>;
@@ -133,8 +134,9 @@ class SqliteLocalStore implements LocalStore {
 
   @override
   Future<void> saveEvents(String name, List<Object?> events) async {
+    final database = _db;
     final texts = await BackgroundJson.encodeAll(events);
-    await _write((txn, now) async {
+    await _writeTo(database, (txn, now) async {
       final batch = txn.batch();
       for (final (i, item) in events.indexed) {
         final event = item! as Map<String, dynamic>;
@@ -199,8 +201,9 @@ class SqliteLocalStore implements LocalStore {
 
   @override
   Future<void> saveNotifications(List<Object?> notifications) async {
+    final database = _db;
     final texts = await BackgroundJson.encodeAll(notifications);
-    await _write((txn, now) async {
+    await _writeTo(database, (txn, now) async {
       final batch = txn.batch()..delete('notifications');
       for (final (position, item) in notifications.indexed) {
         batch.insert('notifications', {
@@ -322,10 +325,16 @@ class SqliteLocalStore implements LocalStore {
     );
   }
 
-  Future<void> _write(
+  Future<void> _write(Future<void> Function(Transaction txn, int now) action) =>
+      _writeTo(_db, action);
+
+  // Encoding may yield to another isolate while the user switches accounts.
+  // Always finish against the database captured before that work started.
+  Future<void> _writeTo(
+    Future<Database>? database,
     Future<void> Function(Transaction txn, int now) action,
   ) async {
-    final db = await _db;
+    final db = await database;
     if (db == null) return;
     final now = _clock().millisecondsSinceEpoch;
     await db.transaction((txn) => action(txn, now));

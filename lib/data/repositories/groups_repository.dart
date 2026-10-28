@@ -44,6 +44,13 @@ class GroupsRepository {
   /// is common (list, profile, back, another profile, back to the first). 30
   /// profiles of a few KB each cover a long session for well under 1 MB.
   final _details = LruCache<int, Rso>(capacity: 30);
+  int _detailSession = -1;
+
+  void _syncDetailSession() {
+    if (_detailSession == _cache.sessionVersion) return;
+    _details.clear();
+    _detailSession = _cache.sessionVersion;
+  }
 
   static const mineKey = 'groups:mine';
   static const browseKey = 'groups:browse';
@@ -88,6 +95,8 @@ class GroupsRepository {
     required EntryPoint entryPoint,
     String? recRequestId,
   }) async {
+    _syncDetailSession();
+    final session = _cache.sessionVersion;
     final rso = await _cache.networkFirst(
       detailKey(id),
       fetch: () => _api.get(
@@ -99,14 +108,17 @@ class GroupsRepository {
           _cache.store.saveGroupDetail(json! as Map<String, dynamic>),
       load: () => _cache.store.groupDetail(id),
     );
-    _details[id] = rso;
+    if (session == _cache.sessionVersion) _details[id] = rso;
     return rso;
   }
 
   /// The full profile if it was opened earlier in this session, to show while
   /// [detail] fetches the live one. Never a substitute for [detail], which is
   /// also what records the view.
-  Rso? recentDetail(int id) => _details[id];
+  Rso? recentDetail(int id) {
+    _syncDetailSession();
+    return _details[id];
+  }
 
   /// Bookmarks the group. [source] is the screen it was saved from:
   /// `explore` or `group_detail` (BQ13).

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart';
 import 'package:senecapp/app_services.dart';
 import 'package:senecapp/core/cache/lru_cache.dart';
 import 'package:senecapp/data/api/api_client.dart';
@@ -164,6 +166,71 @@ void main() {
       await services.groups.detail(3, entryPoint: EntryPoint.explore);
 
       expect(services.groups.recentDetail(3)?.id, 3);
+    });
+
+    test('sign-out clears group and event details from memory', () async {
+      final session = SessionController(
+        auth: services.auth,
+        me: services.me,
+        api: services.api,
+        offline: services.offline,
+      );
+      await session.start();
+      await services.groups.detail(3, entryPoint: EntryPoint.explore);
+      await services.events.detail(2, entryPoint: EventEntryPoint.events);
+
+      await session.signOut();
+
+      expect(services.groups.recentDetail(3), isNull);
+      expect(services.events.recentDetail(2), isNull);
+      session.dispose();
+    });
+
+    test('late details cannot populate another account caches', () async {
+      final backend = FakeBackend();
+      final started = Completer<void>();
+      final release = Completer<void>();
+      var pending = 0;
+      final delayed = testServices(
+        auth: signedInAuth(),
+        store: services.offline.store,
+        backend: MockClient((request) async {
+          final response = await backend.client.get(
+            request.url,
+            headers: request.headers,
+          );
+          if (request.url.path.endsWith('/groups/3') ||
+              request.url.path.endsWith('/events/2')) {
+            if (++pending == 2) started.complete();
+            await release.future;
+          }
+          return response;
+        }),
+      );
+      final session = SessionController(
+        auth: delayed.auth,
+        me: delayed.me,
+        api: delayed.api,
+        offline: delayed.offline,
+      );
+      await session.start();
+      final group = delayed.groups.detail(3, entryPoint: EntryPoint.explore);
+      final event = delayed.events.detail(
+        2,
+        entryPoint: EventEntryPoint.events,
+      );
+      await started.future;
+
+      await session.signOut();
+      await session.signIn(email: 'other@uniandes.edu.co', password: '');
+      release.complete();
+      await Future.wait<Object>([group, event]);
+
+      expect(delayed.groups.recentDetail(3), isNull);
+      expect(delayed.events.recentDetail(2), isNull);
+      expect(await delayed.offline.store.groupDetail(3), isNull);
+      expect(await delayed.offline.store.eventDetail(2), isNull);
+      session.dispose();
     });
 
     test('the app opens offline with the last profile, and sign-out deletes '

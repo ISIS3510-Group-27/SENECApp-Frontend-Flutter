@@ -49,6 +49,17 @@ class OfflineCache {
   final LocalStore store;
   final DataFreshness freshness;
 
+  int _sessionVersion = 0;
+
+  /// Identifies the account lifetime, including requests still in flight.
+  int get sessionVersion => _sessionVersion;
+
+  /// Old responses must not populate the next account's disk or memory cache.
+  void resetSession() {
+    _sessionVersion++;
+    freshness.reset();
+  }
+
   Future<T> networkFirst<T>(
     String key, {
     required Future<Object?> Function() fetch,
@@ -56,13 +67,14 @@ class OfflineCache {
     required Future<void> Function(Object? json) save,
     required Future<Cached<Object?>?> Function() load,
   }) async {
+    final session = _sessionVersion;
     final Object? json;
     try {
       json = await fetch();
     } on ApiException catch (e, stack) {
-      if (!e.isUnreachable) rethrow;
+      if (!e.isUnreachable || session != _sessionVersion) rethrow;
       final cached = await _quietly(load);
-      if (cached == null) rethrow;
+      if (cached == null || session != _sessionVersion) rethrow;
       final T value;
       try {
         value = parse(cached.value);
@@ -74,6 +86,7 @@ class OfflineCache {
       return value;
     }
     final value = parse(json);
+    if (session != _sessionVersion) return value;
     freshness._fresh(key);
     // A full disk or a broken file must never cost the student a live answer.
     await _quietly(() => save(json));

@@ -135,6 +135,7 @@ class SessionController extends ChangeNotifier {
   Future<void> retry() => _loadProfile();
 
   Future<void> signOut({String? reason}) async {
+    _offline?.resetSession();
     // Events still queued are sent with this student's token, so the next
     // account to sign in on this phone doesn't inherit them. Best effort.
     try {
@@ -154,8 +155,8 @@ class SessionController extends ChangeNotifier {
     } on Object {
       // A copy that can't be deleted is overwritten at the next sign-in.
     }
-    _offline?.freshness.reset();
     await _auth.signOut();
+    _offline?.resetSession();
     _account = null;
     _student = null;
     _error = reason;
@@ -163,6 +164,7 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> _continueWith(AuthAccount? account) async {
+    _offline?.resetSession();
     _account = account;
     if (account == null) return _setStatus(SessionStatus.signedOut);
     if (!account.emailVerified) return _setStatus(SessionStatus.unverified);

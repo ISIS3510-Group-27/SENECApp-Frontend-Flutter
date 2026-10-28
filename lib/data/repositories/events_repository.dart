@@ -22,6 +22,13 @@ class EventsRepository {
   /// Like group profiles: going back to an event page is common, and 30 pages
   /// of a few KB each cost little memory.
   final _details = LruCache<int, CampusEvent>(capacity: 30);
+  int _detailSession = -1;
+
+  void _syncDetailSession() {
+    if (_detailSession == _cache.sessionVersion) return;
+    _details.clear();
+    _detailSession = _cache.sessionVersion;
+  }
 
   static String listKey({required bool mine}) =>
       mine ? 'events:mine' : 'events:all';
@@ -93,6 +100,8 @@ class EventsRepository {
     required EventEntryPoint entryPoint,
     String? recRequestId,
   }) async {
+    _syncDetailSession();
+    final session = _cache.sessionVersion;
     final event = await _cache.networkFirst(
       detailKey(id),
       fetch: () => _api.get(
@@ -107,13 +116,16 @@ class EventsRepository {
           _cache.store.saveEventDetail(json! as Map<String, dynamic>),
       load: () => _cache.store.eventDetail(id),
     );
-    _details[id] = event;
+    if (session == _cache.sessionVersion) _details[id] = event;
     return event;
   }
 
   /// The event's page if it was opened earlier in this session, to show while
   /// [detail] fetches the live one (which also records the view).
-  CampusEvent? recentDetail(int id) => _details[id];
+  CampusEvent? recentDetail(int id) {
+    _syncDetailSession();
+    return _details[id];
+  }
 
   /// Records the student at the event, from the code in its QR. With the
   /// phone's position, the backend also checks they are near the venue.

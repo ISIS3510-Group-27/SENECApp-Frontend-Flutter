@@ -110,6 +110,27 @@ void main() {
     expect(await s.document('me'), isNull);
   });
 
+  test(
+    'background encoding cannot write a list into the next account',
+    () async {
+      final s = store();
+      await s.open('first@uniandes.edu.co');
+      final writing = s
+          .saveEvents('all', [for (var id = 1; id <= 100; id++) event(id)])
+          .catchError((Object _) {
+            // Closing the old database may cancel its pending write.
+          });
+
+      await s.open('second@uniandes.edu.co');
+      await writing;
+
+      expect(await s.events('all'), isNull);
+      await s.wipe();
+      await s.open('first@uniandes.edu.co');
+      await s.wipe();
+    },
+  );
+
   test('old rows no list points to are pruned when reopened', () async {
     final s = store();
     await s.open('a@uniandes.edu.co');
