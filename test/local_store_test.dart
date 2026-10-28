@@ -104,6 +104,35 @@ void main() {
     await s.wipe();
   });
 
+  test('check-in updates shared rows without changing snapshot age', () async {
+    final s = store();
+    await s.open('a@uniandes.edu.co');
+    await s.saveEvents('all', [event(1), event(2)]);
+    await s.saveEvents('mine', [event(2)]);
+    await s.saveEventDetail({...event(2), 'description': 'Keep this'});
+    final savedAt = now;
+    now = now.add(const Duration(hours: 1));
+
+    await s.markEventCheckedIn(2);
+    await s.markEventCheckedIn(2); // Retrying is idempotent.
+    await s.markEventCheckedIn(999); // An unseen event needs no invented row.
+
+    final detail = (await s.eventDetail(2))!;
+    expect(detail.value['checked_in'], isTrue);
+    expect(detail.value['description'], 'Keep this');
+    expect(detail.savedAt, savedAt);
+    final all = (await s.events('all'))!;
+    expect((all.value.first! as Map)['checked_in'], isNull);
+    expect((all.value.last! as Map)['checked_in'], isTrue);
+    expect(all.savedAt, savedAt);
+    expect(
+      ((await s.events('mine'))!.value.single! as Map)['checked_in'],
+      true,
+    );
+    expect(await s.eventDetail(999), isNull);
+    await s.wipe();
+  });
+
   test('nothing is stored or read before an account is open', () async {
     final s = store();
     await s.saveDocument('me', {'id': 1});

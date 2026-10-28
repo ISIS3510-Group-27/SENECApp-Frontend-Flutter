@@ -137,8 +137,9 @@ class EventsRepository {
     double? latitude,
     double? longitude,
   }) async {
-    _details.remove(eventId);
-    return CheckInResult.fromJson(
+    _syncDetailSession();
+    final session = _cache.sessionVersion;
+    final result = CheckInResult.fromJson(
       await _api.post(
             '/events/$eventId/check-in',
             body: {
@@ -149,6 +150,13 @@ class EventsRepository {
           )
           as Map<String, dynamic>,
     );
+    if (session == _cache.sessionVersion) {
+      final event = _details[eventId];
+      if (event != null) _details[eventId] = event.copyWith(checkedIn: true);
+      // Keep the acknowledged attendance even if the next read is offline.
+      await _cache.keep(() => _cache.store.markEventCheckedIn(eventId));
+    }
+    return result;
   }
 
   /// The QR code for organizers to show at the venue. Only the group's admins

@@ -37,6 +37,9 @@ abstract interface class LocalStore {
   Future<void> saveEventDetail(Map<String, dynamic> event);
   Future<Cached<Map<String, dynamic>>?> eventDetail(int id);
 
+  /// Applies a successful check-in to existing event summaries and details.
+  Future<void> markEventCheckedIn(int id);
+
   /// Replaces the inbox.
   Future<void> saveNotifications(List<Object?> notifications);
   Future<Cached<List<Object?>>?> notifications();
@@ -80,6 +83,9 @@ class NoLocalStore implements LocalStore {
 
   @override
   Future<Cached<Map<String, dynamic>>?> eventDetail(int id) async => null;
+
+  @override
+  Future<void> markEventCheckedIn(int id) async {}
 
   @override
   Future<void> saveNotifications(List<Object?> notifications) async {}

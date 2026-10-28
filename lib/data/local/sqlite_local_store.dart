@@ -197,6 +197,22 @@ class SqliteLocalStore implements LocalStore {
   Future<Cached<Map<String, dynamic>>?> eventDetail(int id) =>
       _readDetail('events', id);
 
+  @override
+  Future<void> markEventCheckedIn(int id) => _write((txn, _) async {
+    final rows = await txn.query('events', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return;
+    final updates = <String, Object?>{};
+    for (final column in ['summary_json', 'detail_json']) {
+      final text = rows.single[column] as String?;
+      if (text == null) continue;
+      final json = jsonDecode(text) as Map<String, dynamic>;
+      json['checked_in'] = true;
+      updates[column] = jsonEncode(json);
+    }
+    // Lists share this row. Preserve timestamps: other fields are not newer.
+    await txn.update('events', updates, where: 'id = ?', whereArgs: [id]);
+  });
+
   // --- Notifications and documents ------------------------------------------
 
   @override

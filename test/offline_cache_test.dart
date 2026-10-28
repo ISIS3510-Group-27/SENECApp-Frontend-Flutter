@@ -233,6 +233,65 @@ void main() {
       session.dispose();
     });
 
+    test('accepted check-in remains in detail and lists offline', () async {
+      final backend = FakeBackend(liveEventId: 2);
+      final network = SwitchableConnection(backend.client);
+      final checked = testServices(
+        auth: signedInAuth(),
+        backend: network,
+        store: services.offline.store,
+      );
+      await checked.events.list();
+      await checked.events.list(mine: true);
+      await checked.events.detail(2, entryPoint: EventEntryPoint.events);
+
+      await checked.events.checkIn(2, code: FakeBackend.checkInCode(2));
+      expect(checked.events.recentDetail(2)!.checkedIn, isTrue);
+      network.online = false;
+
+      expect(
+        (await checked.events.detail(
+          2,
+          entryPoint: EventEntryPoint.events,
+        )).checkedIn,
+        isTrue,
+      );
+      for (final mine in [false, true]) {
+        final list = await checked.events.list(mine: mine);
+        expect(list.singleWhere((event) => event.id == 2).checkedIn, isTrue);
+      }
+      // Recreating the repository still sees the acknowledged check-in.
+      final restarted = testServices(
+        auth: signedInAuth(),
+        backend: network,
+        store: services.offline.store,
+      );
+      expect(
+        (await restarted.events.detail(
+          2,
+          entryPoint: EventEntryPoint.events,
+        )).checkedIn,
+        isTrue,
+      );
+    });
+
+    test('refused check-in does not mark the offline event attended', () async {
+      await services.events.detail(2, entryPoint: EventEntryPoint.events);
+      await expectLater(
+        services.events.checkIn(2, code: 'WRONG'),
+        throwsA(isA<ApiException>()),
+      );
+      expect(services.events.recentDetail(2)!.checkedIn, isFalse);
+      connection.online = false;
+      expect(
+        (await services.events.detail(
+          2,
+          entryPoint: EventEntryPoint.events,
+        )).checkedIn,
+        isFalse,
+      );
+    });
+
     test('the app opens offline with the last profile, and sign-out deletes '
         'it', () async {
       SessionController session() => SessionController(
