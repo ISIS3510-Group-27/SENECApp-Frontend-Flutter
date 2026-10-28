@@ -12,10 +12,12 @@ import 'data/auth/dev_auth_service.dart';
 import 'data/auth/firebase_auth_service.dart';
 import 'data/connectivity/connectivity_service.dart';
 import 'data/local/cover_cache.dart';
+import 'data/local/event_draft_store.dart';
 import 'data/local/local_store.dart';
 import 'data/local/offline_cache.dart';
 import 'data/local/sqlite_local_store.dart';
 import 'data/location/location_service.dart';
+import 'data/location/maps_service.dart';
 import 'data/push/push_service.dart';
 import 'data/reminders/reminder_notifications.dart';
 import 'data/repositories/catalog_repository.dart';
@@ -36,6 +38,7 @@ class AppServices {
     required this.api,
     this.preferences,
     this.location = const GeolocatorLocationService(),
+    this.maps = const GoogleMapsService(),
     this.qrCamera = mobileScannerCamera,
     Analytics? analytics,
     this.push = const DisabledPushService(),
@@ -45,7 +48,9 @@ class AppServices {
     LocalStore store = const NoLocalStore(),
     this.connectivity = const AlwaysConnected(),
     this.covers,
+    EventDraftStore? eventDrafts,
   }) : analytics = analytics ?? Analytics(api: api, context: api.context),
+       eventDrafts = eventDrafts ?? MemoryEventDraftStore(),
        offline = OfflineCache(store: store),
        recommendations = RecommendationsRepository(api);
 
@@ -55,6 +60,9 @@ class AppServices {
 
   /// The phone's GPS.
   final LocationService location;
+
+  /// External maps, opened only after an explicit action.
+  final MapsService maps;
 
   /// The phone's camera, for scanning check-in codes.
   final QrCameraBuilder qrCamera;
@@ -75,6 +83,9 @@ class AppServices {
   /// Group photos on disk, downloaded ahead of time for offline use. None in
   /// tests, which never download images.
   final CoverCache? covers;
+
+  /// Unpublished event forms, isolated by account and group.
+  final EventDraftStore eventDrafts;
 
   /// Whether the phone has a network, and when that changes.
   final ConnectivityService connectivity;
@@ -146,6 +157,9 @@ class AppServices {
       store: kIsWeb ? const NoLocalStore() : SqliteLocalStore(),
       connectivity: PlusConnectivityService(),
       covers: CoverCache(),
+      eventDrafts: kIsWeb
+          ? PrefsEventDraftStore(prefs)
+          : SqliteEventDraftStore(),
     );
   }
 }

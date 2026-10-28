@@ -7,16 +7,19 @@ import '../../core/format/dates.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../core/widgets/async_states.dart';
 import '../../core/widgets/offline.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/campus_event.dart';
+import '../../data/models/event_draft.dart';
 import '../../data/models/catalog.dart';
 import '../../data/models/leader_insights.dart';
 import '../../data/models/rso.dart';
 import '../shell/track_screen.dart';
+import 'event_draft_view_model.dart';
 
 class CreateEventScreen extends StatefulWidget {
   const CreateEventScreen({super.key, required this.rso});
@@ -61,8 +64,62 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       .audience(widget.rso.id);
 
   SuggestedSlot? _pickedSlot;
-  bool _publishing = false;
-  String? _error;
+  late final EventDraftViewModel _drafts;
+  bool _leaving = false;
+  bool _leaveDialogOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final services = context.read<AppServices>();
+    final session = services.offline.sessionVersion;
+    _drafts = EventDraftViewModel(
+      groupId: widget.rso.id,
+      auth: services.auth,
+      store: services.eventDrafts,
+      events: services.events,
+      analytics: services.analytics,
+      isOnline: () => mounted && isOnline(context, listen: false),
+      sessionActive: () => services.offline.sessionVersion == session,
+    )..addListener(_draftChanged);
+    _restoreDraft();
+  }
+
+  void _draftChanged() {
+    if (mounted) setState(() {});
+  }
+
+  EventDraft get _form => EventDraft(
+    title: _title.text,
+    room: _room.text,
+    capacity: _capacity.text,
+    description: _description.text,
+    date: _date,
+    startMinute: _start == null ? null : _start!.hour * 60 + _start!.minute,
+    durationMinutes: _length.inMinutes,
+    buildingId: _buildingId,
+  );
+
+  Future<void> _restoreDraft() async {
+    await _drafts.load();
+    if (!mounted || !_drafts.ready) return;
+    _fillForm(_drafts.saved ?? const EventDraft());
+  }
+
+  void _fillForm(EventDraft draft) => setState(() {
+    _title.text = draft.title;
+    _room.text = draft.room;
+    _capacity.text = draft.capacity;
+    _description.text = draft.description;
+    _date = draft.date;
+    final minute = draft.startMinute;
+    _start = minute == null
+        ? null
+        : TimeOfDay(hour: minute ~/ 60, minute: minute % 60);
+    _length = Duration(minutes: draft.durationMinutes);
+    _buildingId = draft.buildingId;
+    _pickedSlot = null;
+  });
 
   Future<BestTimes> _loadBestTimes() => context
       .read<AppServices>()
@@ -77,22 +134,17 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   }
 
   bool get _canPublish {
-    final startsAt = _startsAt;
-    return _title.text.trim().length >= CreateEventScreen.minTitle &&
-        startsAt != null &&
-        startsAt.isAfter(DateTime.now()) &&
-        _capacityValue != -1;
-  }
-
-  int? get _capacityValue {
-    final text = _capacity.text.trim();
-    if (text.isEmpty) return null;
-    final value = int.tryParse(text);
-    return value == null || value < 1 ? -1 : value;
+    return _drafts.ready &&
+        !_drafts.busy &&
+        !_drafts.needsReview &&
+        !_drafts.alreadyPublished &&
+        _form.canPublish(DateTime.now());
   }
 
   @override
   void dispose() {
+    _drafts.removeListener(_draftChanged);
+    _drafts.dispose();
     _title.dispose();
     _room.dispose();
     _capacity.dispose();
@@ -140,7 +192,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: _date ?? now,
+      initialDate: _date == null || _date!.isBefore(DateUtils.dateOnly(now))
+          ? now
+          : _date!,
       firstDate: DateUtils.dateOnly(now),
       lastDate: now.add(const Duration(days: 180)),
     );
@@ -166,239 +220,420 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   }
 
   Future<void> _publish() async {
-    final startsAt = _startsAt;
-    if (!_canPublish || startsAt == null) return;
+    if (!_canPublish) return;
     FocusScope.of(context).unfocus();
-    final online = await ensureOnline(
-      context,
-      title: 'Publishing needs a connection',
-      message:
-          'Members are notified as soon as the event is published. The form '
-          "keeps everything you filled in; publish it when you're back online.",
-    );
-    if (!online || !mounted) return;
-    setState(() {
-      _publishing = true;
-      _error = null;
-    });
-    final room = _room.text.trim();
-    final description = _description.text.trim();
-    try {
-      final event = await context.read<AppServices>().events.create(
-        widget.rso.id,
-        title: _title.text.trim(),
-        startsAt: startsAt,
-        endsAt: startsAt.add(_length),
-        description: description.isEmpty ? null : description,
-        buildingId: _buildingId,
-        locationDetail: room.isEmpty ? null : room,
-        capacity: _capacityValue,
-      );
-      if (!mounted) return;
+    final event = await _drafts.publish(_form);
+    if (!mounted) return;
+    if (event != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Event published. Members were notified.'),
         ),
       );
-      Navigator.of(context).pop(event);
-    } on ApiException catch (e) {
+      setState(() => _leaving = true);
+      await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
-      reportError(context, e, screen: Screens.createEvent);
-      setState(() {
-        _publishing = false;
-        _error = e.message;
-      });
+      Navigator.of(context).pop(event);
+    } else if (_drafts.error == null && !_drafts.needsReview) {
+      _savedMessage();
     }
   }
+
+  void _savedMessage() => ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Draft saved on this device. Not published.')),
+  );
+
+  Future<void> _saveDraft() async {
+    if (await _drafts.save(_form) && mounted) _savedMessage();
+  }
+
+  Future<void> _leave() async {
+    if (_drafts.busy || _leaveDialogOpen) return;
+    if (!_drafts.hasChanges(_form)) {
+      Navigator.of(context).pop();
+      return;
+    }
+    _leaveDialogOpen = true;
+    final decision = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: Text('Save your draft?', style: AppTheme.heading(size: 18)),
+        content: Text(
+          'Some edits are not saved on this device.',
+          style: AppTheme.body(size: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'stay'),
+            child: const Text('Keep editing'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'leave'),
+            child: const Text('Leave without saving'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'save'),
+            child: const Text('Save draft'),
+          ),
+        ],
+      ),
+    );
+    _leaveDialogOpen = false;
+    if (!mounted || decision == null || decision == 'stay') return;
+    if (decision == 'save' && !await _drafts.save(_form)) return;
+    if (!mounted) return;
+    setState(() => _leaving = true);
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _discardDraft() async {
+    final discard = await _confirm(
+      'Delete this draft?',
+      'This removes the saved draft and current edits from this device. '
+          'It does not delete any published event.',
+      'Delete draft',
+    );
+    if (discard && await _drafts.discard() && mounted) {
+      _fillForm(const EventDraft());
+    }
+  }
+
+  Future<void> _allowRetry() async {
+    final retry = await _confirm(
+      'Did you check the group events?',
+      'The last request may have published the event. Only allow another '
+          'attempt after checking that it is not already listed.',
+      'Not published: allow retry',
+    );
+    if (retry) await _drafts.allowRetry();
+  }
+
+  Future<bool> _confirm(String title, String message, String action) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppColors.card,
+          title: Text(title, style: AppTheme.heading(size: 18)),
+          content: Text(message, style: AppTheme.body(size: 14)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(action),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 
   @override
   Widget build(BuildContext context) =>
       TrackScreen(name: Screens.createEvent, child: _buildScreen(context));
 
   Widget _buildScreen(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(kPageGutter, 12, kPageGutter, 40),
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: RoundIconButton(
-                icon: Icons.arrow_back_rounded,
-                tooltip: 'Back',
-                size: 36,
-                iconSize: 17,
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              widget.rso.name.toUpperCase(),
-              style: AppTheme.body(
-                size: 11,
-                weight: FontWeight.w800,
-                color: widget.rso.color,
-                letterSpacing: 1.6,
-              ),
-            ),
-            Text('New event', style: AppTheme.heading(size: 26)),
-            const SizedBox(height: 24),
-            const SectionLabel(text: 'Your members can make it'),
-            const SizedBox(height: 10),
-            _BestTimesSection(
-              bestTimes: _bestTimes,
-              picked: _pickedSlot,
-              onUse: _useSlot,
-              onRetry: () => setState(() => _bestTimes = _loadBestTimes()),
-            ),
-            const SizedBox(height: 24),
-            const SectionLabel(text: 'Where students engage'),
-            const SizedBox(height: 10),
-            _AudienceSection(audience: _audience, onUse: _useAudienceCell),
-            const SizedBox(height: 28),
-            const SectionLabel(text: 'Title'),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _title,
-              maxLength: 200,
-              textCapitalization: TextCapitalization.sentences,
-              style: AppTheme.body(size: 14),
-              decoration: const InputDecoration(
-                hintText: 'e.g. Doubles night',
-                counterText: '',
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 20),
-            const SectionLabel(text: 'When'),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _PickerField(
-                    icon: Icons.calendar_today_rounded,
-                    text: _date == null ? 'Pick a date' : Dates.day(_date!),
-                    onTap: _pickDate,
-                  ),
+    final online = isOnline(context);
+    if (_drafts.loading || !_drafts.ready) {
+      return Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: IconButton(
+                  tooltip: 'Back',
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _PickerField(
-                    icon: Icons.schedule_rounded,
-                    text: _start == null
-                        ? 'Start time'
-                        : Dates.time(_startsAt ?? _todayAt(_start!)),
-                    onTap: _pickTime,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final length in CreateEventScreen.lengths)
-                  SelectableChip.filter(
-                    label: _lengthLabel(length),
-                    selected: length == _length,
-                    onSelected: (_) => _setLength(length),
-                  ),
-              ],
-            ),
-            if (_startsAt case final startsAt?)
-              if (!startsAt.isAfter(DateTime.now()))
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Pick a time in the future.',
-                    style: AppTheme.body(size: 12, color: AppColors.orange),
-                  ),
-                ),
-            const SizedBox(height: 20),
-            const SectionLabel(text: 'Where'),
-            const SizedBox(height: 10),
-            FutureBuilder<List<Building>>(
-              future: _buildings,
-              builder: (context, snapshot) {
-                final buildings = snapshot.data ?? const <Building>[];
-                final known = buildings.any((b) => b.id == _buildingId);
-                return DropdownButtonFormField<int>(
-                  initialValue: known ? _buildingId : null,
-                  key: ValueKey('building-$_buildingId-${buildings.length}'),
-                  isExpanded: true,
-                  dropdownColor: AppColors.card,
-                  hint: Text(
-                    snapshot.hasError ? 'Buildings unavailable' : 'Building',
-                    style: AppTheme.body(
-                      size: 14,
-                      color: AppColors.mutedForeground,
-                    ),
-                  ),
-                  items: [
-                    for (final building in buildings)
-                      DropdownMenuItem(
-                        value: building.id,
-                        child: Text(
-                          building.name,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTheme.body(size: 14),
-                        ),
+              ),
+              Expanded(
+                child: _drafts.loading
+                    ? const LoadingBlock()
+                    : ErrorBlock(
+                        message: _drafts.error ?? 'Draft unavailable.',
+                        onRetry: _restoreDraft,
                       ),
-                  ],
-                  onChanged: (id) => setState(() => _buildingId = id),
-                );
-              },
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _room,
-              maxLength: 200,
-              style: AppTheme.body(size: 14),
-              decoration: const InputDecoration(
-                hintText: 'Room or spot, e.g. Salón 224',
-                counterText: '',
-              ),
-            ),
-            const SizedBox(height: 20),
-            const SectionLabel(text: 'Capacity (optional)'),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _capacity,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: AppTheme.body(size: 14),
-              decoration: const InputDecoration(hintText: 'No limit'),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 20),
-            const SectionLabel(text: 'Description (optional)'),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _description,
-              maxLines: 4,
-              maxLength: 2000,
-              textCapitalization: TextCapitalization.sentences,
-              style: AppTheme.body(size: 14),
-              decoration: const InputDecoration(
-                hintText: 'What will happen, what to bring...',
-                counterText: '',
-              ),
-            ),
-            if (_error case final error?) ...[
-              const SizedBox(height: 16),
-              Text(
-                error,
-                style: AppTheme.body(size: 13, color: AppColors.orange),
               ),
             ],
-            const SizedBox(height: 24),
-            PrimaryButton(
-              label: 'Publish event',
-              busy: _publishing,
-              onPressed: _canPublish ? _publish : null,
+          ),
+        ),
+      );
+    }
+    return PopScope(
+      canPop: _leaving || (!_drafts.busy && !_drafts.hasChanges(_form)),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _leave();
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: AbsorbPointer(
+            absorbing: _drafts.busy,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                kPageGutter,
+                12,
+                kPageGutter,
+                40,
+              ),
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: RoundIconButton(
+                    icon: Icons.arrow_back_rounded,
+                    tooltip: 'Back',
+                    size: 36,
+                    iconSize: 17,
+                    onPressed: _leave,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  widget.rso.name.toUpperCase(),
+                  style: AppTheme.body(
+                    size: 11,
+                    weight: FontWeight.w800,
+                    color: widget.rso.color,
+                    letterSpacing: 1.6,
+                  ),
+                ),
+                Text('New event', style: AppTheme.heading(size: 26)),
+                if (!online) ...[
+                  const SizedBox(height: 12),
+                  const OfflineNote(
+                    'Offline. Drafts stay on this device; publishing waits for a connection.',
+                  ),
+                ],
+                if (_drafts.saved != null) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _drafts.needsReview
+                              ? 'Publication not confirmed'
+                              : _drafts.alreadyPublished
+                              ? 'Event already published'
+                              : _drafts.hasChanges(_form)
+                              ? 'Draft has unsaved edits'
+                              : 'Draft saved on this device',
+                          style: AppTheme.body(size: 13),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Delete draft',
+                        onPressed: _discardDraft,
+                        icon: const Icon(Icons.delete_outline_rounded),
+                      ),
+                    ],
+                  ),
+                ],
+                if (_drafts.needsReview) ...[
+                  Text(
+                    'Check the group events before retrying. The last request may have succeeded.',
+                    style: AppTheme.body(size: 13, color: AppColors.orange),
+                  ),
+                  TextButton(
+                    onPressed: online ? _allowRetry : null,
+                    child: const Text('Review publication'),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                const SectionLabel(text: 'Your members can make it'),
+                const SizedBox(height: 10),
+                _BestTimesSection(
+                  bestTimes: _bestTimes,
+                  picked: _pickedSlot,
+                  onUse: _useSlot,
+                  onRetry: () => setState(() => _bestTimes = _loadBestTimes()),
+                ),
+                const SizedBox(height: 24),
+                const SectionLabel(text: 'Where students engage'),
+                const SizedBox(height: 10),
+                _AudienceSection(audience: _audience, onUse: _useAudienceCell),
+                const SizedBox(height: 28),
+                const SectionLabel(text: 'Title'),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _title,
+                  maxLength: 200,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: AppTheme.body(size: 14),
+                  decoration: const InputDecoration(
+                    hintText: 'e.g. Doubles night',
+                    counterText: '',
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 20),
+                const SectionLabel(text: 'When'),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _PickerField(
+                        icon: Icons.calendar_today_rounded,
+                        text: _date == null ? 'Pick a date' : Dates.day(_date!),
+                        onTap: _pickDate,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _PickerField(
+                        icon: Icons.schedule_rounded,
+                        text: _start == null
+                            ? 'Start time'
+                            : Dates.time(_startsAt ?? _todayAt(_start!)),
+                        onTap: _pickTime,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final length in CreateEventScreen.lengths)
+                      SelectableChip.filter(
+                        label: _lengthLabel(length),
+                        selected: length == _length,
+                        onSelected: (_) => _setLength(length),
+                      ),
+                  ],
+                ),
+                if (_startsAt case final startsAt?)
+                  if (!startsAt.isAfter(DateTime.now()))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Pick a time in the future.',
+                        style: AppTheme.body(size: 12, color: AppColors.orange),
+                      ),
+                    ),
+                const SizedBox(height: 20),
+                const SectionLabel(text: 'Where'),
+                const SizedBox(height: 10),
+                FutureBuilder<List<Building>>(
+                  future: _buildings,
+                  builder: (context, snapshot) {
+                    final buildings = snapshot.data ?? const <Building>[];
+                    final known = buildings.any((b) => b.id == _buildingId);
+                    return DropdownButtonFormField<int>(
+                      initialValue: _buildingId,
+                      key: ValueKey(
+                        'building-$_buildingId-${buildings.length}',
+                      ),
+                      isExpanded: true,
+                      dropdownColor: AppColors.card,
+                      hint: Text(
+                        snapshot.hasError
+                            ? 'Buildings unavailable'
+                            : 'Building',
+                        style: AppTheme.body(
+                          size: 14,
+                          color: AppColors.mutedForeground,
+                        ),
+                      ),
+                      items: [
+                        if (!known && _buildingId != null)
+                          DropdownMenuItem(
+                            value: _buildingId,
+                            child: Text(
+                              'Saved building #$_buildingId',
+                              style: AppTheme.body(size: 14),
+                            ),
+                          ),
+                        for (final building in buildings)
+                          DropdownMenuItem(
+                            value: building.id,
+                            child: Text(
+                              building.name,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTheme.body(size: 14),
+                            ),
+                          ),
+                      ],
+                      onChanged: (id) => setState(() => _buildingId = id),
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _room,
+                  maxLength: 200,
+                  style: AppTheme.body(size: 14),
+                  decoration: const InputDecoration(
+                    hintText: 'Room or spot, e.g. Salón 224',
+                    counterText: '',
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 20),
+                const SectionLabel(text: 'Capacity (optional)'),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _capacity,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: AppTheme.body(size: 14),
+                  decoration: const InputDecoration(hintText: 'No limit'),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 20),
+                const SectionLabel(text: 'Description (optional)'),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _description,
+                  maxLines: 4,
+                  maxLength: 2000,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: AppTheme.body(size: 14),
+                  decoration: const InputDecoration(
+                    hintText: 'What will happen, what to bring...',
+                    counterText: '',
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                if (_drafts.error case final error?) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    error,
+                    style: AppTheme.body(size: 13, color: AppColors.orange),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(54),
+                    foregroundColor: AppColors.foreground,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                    ),
+                    textStyle: AppTheme.heading(
+                      size: 16,
+                      weight: FontWeight.w700,
+                    ),
+                  ),
+                  icon: const Icon(Icons.save_outlined),
+                  label: Text(_drafts.busy ? 'Saving...' : 'Save draft'),
+                  onPressed: _drafts.busy || _drafts.alreadyPublished
+                      ? null
+                      : _saveDraft,
+                ),
+                const SizedBox(height: 10),
+                PrimaryButton(
+                  label: 'Publish event',
+                  busy: _drafts.busy,
+                  onPressed: online && _canPublish ? _publish : null,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
