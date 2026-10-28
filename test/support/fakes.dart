@@ -12,6 +12,7 @@ import 'package:senecapp/data/api/client_context.dart';
 import 'package:senecapp/data/auth/auth_service.dart';
 import 'package:senecapp/data/connectivity/connectivity_service.dart';
 import 'package:senecapp/data/local/local_store.dart';
+import 'package:senecapp/data/local/event_draft_store.dart';
 import 'package:senecapp/data/location/location_service.dart';
 import 'package:senecapp/data/location/maps_service.dart';
 import 'package:senecapp/data/push/push_service.dart';
@@ -156,6 +157,7 @@ AppServices testServices({
   PushService? push,
   SharedPreferences? preferences,
   LocalStore? store,
+  EventDraftStore? eventDrafts,
   ConnectivityService? connectivity,
 }) {
   final fakeAuth = auth ?? FakeAuthService();
@@ -163,6 +165,7 @@ AppServices testServices({
     auth: fakeAuth,
     preferences: preferences,
     store: store ?? const NoLocalStore(),
+    eventDrafts: eventDrafts,
     connectivity: connectivity ?? const AlwaysConnected(),
     location: location ?? FakeLocationService(),
     maps: maps ?? FakeMapsService(),
