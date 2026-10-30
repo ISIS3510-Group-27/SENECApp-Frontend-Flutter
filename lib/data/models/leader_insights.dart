@@ -35,6 +35,23 @@ class SuggestedSlot {
 
   final DateTime nextStartsAt;
 
+  SuggestedSlot upcoming(DateTime now) {
+    var next = nextStartsAt;
+    while (!next.isAfter(now)) {
+      next = next.add(const Duration(days: 7));
+    }
+    if (next == nextStartsAt) return this;
+    return SuggestedSlot(
+      weekday: weekday,
+      startTime: startTime,
+      endTime: endTime,
+      freeMembers: freeMembers,
+      freeRatio: freeRatio,
+      attendanceRate: attendanceRate,
+      nextStartsAt: next,
+    );
+  }
+
   Duration get length {
     int minutes(String clock) {
       final parts = clock.split(':');
@@ -68,6 +85,13 @@ class BestTimes {
   final int membersWithSchedule;
   final int pastEvents;
   final List<SuggestedSlot> slots;
+
+  BestTimes upcoming(DateTime now) => BestTimes(
+    members: members,
+    membersWithSchedule: membersWithSchedule,
+    pastEvents: pastEvents,
+    slots: [for (final slot in slots) slot.upcoming(now)],
+  );
 }
 
 @immutable
@@ -129,4 +153,67 @@ class Audience {
   final List<AudienceCell> byBuilding;
 
   bool get isEmpty => bestTimeAndPlace.isEmpty && byBuilding.isEmpty;
+}
+
+@immutable
+class ProfileField {
+  const ProfileField({
+    required this.field,
+    required this.filled,
+    required this.views,
+    required this.correlation,
+    required this.lift,
+  });
+
+  factory ProfileField.fromJson(Map<String, dynamic> json) => ProfileField(
+    field: json['field'] as String,
+    filled: json['filled'] as bool,
+    views: json['views'] as int,
+    correlation: (json['correlation'] as num?)?.toDouble(),
+    lift: (json['lift'] as num?)?.toDouble(),
+  );
+
+  final String field;
+  final bool filled;
+  final int views;
+  final double? correlation;
+  final double? lift;
+}
+
+@immutable
+class ProfileTips {
+  const ProfileTips({
+    required this.question,
+    required this.answer,
+    required this.filled,
+    required this.total,
+    required this.fields,
+  });
+
+  factory ProfileTips.fromJson(Map<String, dynamic> json) => ProfileTips(
+    question: json['question'] as String,
+    answer: json['answer'] as String,
+    filled: json['filled'] as int,
+    total: json['total'] as int,
+    fields: [
+      for (final field in json['fields'] as List)
+        ProfileField.fromJson(field as Map<String, dynamic>),
+    ],
+  );
+
+  final String question;
+  final String answer;
+  final int filled;
+  final int total;
+  final List<ProfileField> fields;
+
+  List<ProfileField> get missing => [
+    for (final field in fields)
+      if (!field.filled) field,
+  ];
+
+  List<ProfileField> get present => [
+    for (final field in fields)
+      if (field.filled) field,
+  ];
 }

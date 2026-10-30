@@ -194,17 +194,48 @@ class GroupsRepository {
     );
   }
 
-  Future<BestTimes> bestTimes(int id, {required Duration length}) async =>
-      BestTimes.fromJson(
-        await _api.get(
-              '/groups/$id/insights/best-times',
-              query: {'duration_minutes': length.inMinutes},
-            )
-            as Map<String, dynamic>,
-      );
+  static String bestTimesKey(int id) => 'insights:best-times:$id';
+  static String audienceKey(int id) => 'insights:audience:$id';
+  static String profileTipsKey(int id) => 'insights:profile:$id';
 
-  Future<Audience> audience(int id) async => Audience.fromJson(
-    await _api.get('/groups/$id/insights/audience') as Map<String, dynamic>,
+  Future<BestTimes> bestTimes(int id, {required Duration length}) {
+    final stored = '${bestTimesKey(id)}:${length.inMinutes}';
+    return _cache.networkFirst(
+      bestTimesKey(id),
+      fetch: () => _api.get(
+        '/groups/$id/insights/best-times',
+        query: {'duration_minutes': length.inMinutes},
+      ),
+      parse: (json) => BestTimes.fromJson(
+        json! as Map<String, dynamic>,
+      ).upcoming(DateTime.now()),
+      save: (json) => _cache.store.saveDocument(stored, json),
+      load: () => _cache.store.document(stored),
+    );
+  }
+
+  Future<Audience> audience(int id) => _insight(
+    audienceKey(id),
+    '/groups/$id/insights/audience',
+    Audience.fromJson,
+  );
+
+  Future<ProfileTips> profileTips(int id) => _insight(
+    profileTipsKey(id),
+    '/groups/$id/insights/profile',
+    ProfileTips.fromJson,
+  );
+
+  Future<T> _insight<T>(
+    String key,
+    String path,
+    T Function(Map<String, dynamic> json) parse,
+  ) => _cache.networkFirst(
+    key,
+    fetch: () => _api.get(path),
+    parse: (json) => parse(json! as Map<String, dynamic>),
+    save: (json) => _cache.store.saveDocument(key, json),
+    load: () => _cache.store.document(key),
   );
 
   /// Asks the group's admins to make the student an admin too. Throws

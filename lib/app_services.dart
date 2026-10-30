@@ -17,6 +17,7 @@ import 'data/local/local_store.dart';
 import 'data/local/offline_cache.dart';
 import 'data/local/sqlite_local_store.dart';
 import 'data/location/location_service.dart';
+import 'data/local/cover_outbox_store.dart';
 import 'data/location/maps_service.dart';
 import 'data/push/push_service.dart';
 import 'data/reminders/reminder_notifications.dart';
@@ -49,8 +50,10 @@ class AppServices {
     this.connectivity = const AlwaysConnected(),
     this.covers,
     EventDraftStore? eventDrafts,
+    CoverOutboxStore? coverOutbox,
   }) : analytics = analytics ?? Analytics(api: api, context: api.context),
        eventDrafts = eventDrafts ?? MemoryEventDraftStore(),
+       coverOutbox = coverOutbox ?? MemoryCoverOutboxStore(),
        offline = OfflineCache(store: store),
        recommendations = RecommendationsRepository(api);
 
@@ -86,6 +89,8 @@ class AppServices {
 
   /// Unpublished event forms, isolated by account and group.
   final EventDraftStore eventDrafts;
+
+  final CoverOutboxStore coverOutbox;
 
   /// Whether the phone has a network, and when that changes.
   final ConnectivityService connectivity;
@@ -160,6 +165,9 @@ class AppServices {
       eventDrafts: kIsWeb
           ? PrefsEventDraftStore(prefs)
           : SqliteEventDraftStore(),
+      coverOutbox: kIsWeb
+          ? MemoryCoverOutboxStore()
+          : SqliteCoverOutboxStore(),
     );
   }
 }
