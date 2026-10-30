@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'app_services.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/phone_frame.dart';
+import 'data/repositories/insights_repository.dart';
 import 'features/auth/session_status_screens.dart';
 import 'features/auth/sign_in_screen.dart';
 import 'features/auth/verify_email_screen.dart';
@@ -31,6 +32,7 @@ class SenecApp extends StatelessWidget {
           create: (_) => ConnectionStatus(services.connectivity)..start(),
         ),
         ChangeNotifierProvider.value(value: services.offline.freshness),
+        ChangeNotifierProvider.value(value: services.coverUpdates),
         ChangeNotifierProvider(
           create: (_) => SessionController(
             auth: services.auth,
@@ -114,6 +116,14 @@ class _SessionGate extends StatelessWidget {
               )..start();
             },
           ),
+          Provider<_InsightsLease>(
+            lazy: false,
+            create: (context) => _InsightsLease(
+              context.read<AppServices>().insights,
+              session.student!.email,
+            ),
+            dispose: (_, lease) => lease.release(),
+          ),
           ChangeNotifierProvider(
             lazy: false,
             create: (context) {
@@ -122,7 +132,14 @@ class _SessionGate extends StatelessWidget {
                 store: services.coverOutbox,
                 account: session.student!.email,
                 upload: (groupId, bytes) async {
-                  await services.groups.uploadCover(groupId, bytes);
+                  final updated = await services.groups.uploadCover(
+                    groupId,
+                    bytes,
+                  );
+                  services.coverUpdates.record(groupId, updated.imageUrl);
+                  await services.insights.forget(
+                    InsightKeys.profileTips(groupId),
+                  );
                 },
                 reconnected: context.read<ConnectionStatus>().reconnected,
               )..start();
@@ -133,4 +150,14 @@ class _SessionGate extends StatelessWidget {
       ),
     };
   }
+}
+
+class _InsightsLease {
+  _InsightsLease(this._insights, String account) {
+    _insights.useAccount(account);
+  }
+
+  final InsightsRepository _insights;
+
+  void release() => _insights.useAccount(null);
 }
