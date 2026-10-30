@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import '../../core/cache/lru_cache.dart';
+import '../../core/cache/ttl_cache.dart';
 import '../api/api_client.dart';
 import '../local/cover_cache.dart';
 import '../local/local_store.dart';
@@ -30,9 +31,21 @@ class GroupPage {
 /// session are also kept in memory ([recentDetail]), so going back to one
 /// shows it at once while the live copy loads.
 class GroupsRepository {
-  GroupsRepository(this._api, {OfflineCache? cache, CoverCache? covers})
-    : _cache = cache ?? OfflineCache.disabled(),
-      _covers = covers;
+  GroupsRepository(
+    this._api, {
+    OfflineCache? cache,
+    CoverCache? covers,
+    DateTime Function()? clock,
+  }) : _cache = cache ?? OfflineCache.disabled(),
+       _covers = covers,
+       _insights = TtlCache<String, Object>(
+         capacity: insightCapacity,
+         ttl: insightTtl,
+         clock: clock,
+       );
+
+  static const insightCapacity = 20;
+  static const insightTtl = Duration(seconds: 60);
 
   final ApiClient _api;
   final OfflineCache _cache;
@@ -45,6 +58,9 @@ class GroupsRepository {
   /// profiles of a few KB each cover a long session for well under 1 MB.
   final _details = LruCache<int, Rso>(capacity: 30);
   int _detailSession = -1;
+
+  final TtlCache<String, Object> _insights;
+  int _insightSession = -1;
 
   void _syncDetailSession() {
     if (_detailSession == _cache.sessionVersion) return;
@@ -182,7 +198,7 @@ class GroupsRepository {
   /// its metadata (including GPS) and returns the updated group.
   Future<Rso> uploadCover(int id, Uint8List photo) async {
     _details.remove(id);
-    return Rso.fromJson(
+    final updated = Rso.fromJson(
       await _api.upload(
             '/groups/$id/cover',
             field: 'file',
@@ -192,25 +208,49 @@ class GroupsRepository {
           )
           as Map<String, dynamic>,
     );
+    _insights.remove(profileTipsKey(id));
+    return updated;
   }
 
   static String bestTimesKey(int id) => 'insights:best-times:$id';
   static String audienceKey(int id) => 'insights:audience:$id';
   static String profileTipsKey(int id) => 'insights:profile:$id';
 
+  Future<T> _remembered<T extends Object>(
+    String memoryKey,
+    String freshnessKey,
+    Future<T> Function() load,
+  ) async {
+    if (_insightSession != _cache.sessionVersion) {
+      _insights.clear();
+      _insightSession = _cache.sessionVersion;
+    }
+    final kept = _insights[memoryKey];
+    if (kept is T) return kept;
+    final session = _cache.sessionVersion;
+    final value = await load();
+    final live = _cache.freshness.cachedAt(freshnessKey) == null;
+    if (live && session == _cache.sessionVersion) _insights[memoryKey] = value;
+    return value;
+  }
+
   Future<BestTimes> bestTimes(int id, {required Duration length}) {
     final stored = '${bestTimesKey(id)}:${length.inMinutes}';
-    return _cache.networkFirst(
+    return _remembered<BestTimes>(
+      stored,
       bestTimesKey(id),
-      fetch: () => _api.get(
-        '/groups/$id/insights/best-times',
-        query: {'duration_minutes': length.inMinutes},
+      () => _cache.networkFirst(
+        bestTimesKey(id),
+        fetch: () => _api.get(
+          '/groups/$id/insights/best-times',
+          query: {'duration_minutes': length.inMinutes},
+        ),
+        parse: (json) => BestTimes.fromJson(
+          json! as Map<String, dynamic>,
+        ).upcoming(DateTime.now()),
+        save: (json) => _cache.store.saveDocument(stored, json),
+        load: () => _cache.store.document(stored),
       ),
-      parse: (json) => BestTimes.fromJson(
-        json! as Map<String, dynamic>,
-      ).upcoming(DateTime.now()),
-      save: (json) => _cache.store.saveDocument(stored, json),
-      load: () => _cache.store.document(stored),
     );
   }
 
@@ -226,16 +266,20 @@ class GroupsRepository {
     ProfileTips.fromJson,
   );
 
-  Future<T> _insight<T>(
+  Future<T> _insight<T extends Object>(
     String key,
     String path,
     T Function(Map<String, dynamic> json) parse,
-  ) => _cache.networkFirst(
+  ) => _remembered<T>(
     key,
-    fetch: () => _api.get(path),
-    parse: (json) => parse(json! as Map<String, dynamic>),
-    save: (json) => _cache.store.saveDocument(key, json),
-    load: () => _cache.store.document(key),
+    key,
+    () => _cache.networkFirst(
+      key,
+      fetch: () => _api.get(path),
+      parse: (json) => parse(json! as Map<String, dynamic>),
+      save: (json) => _cache.store.saveDocument(key, json),
+      load: () => _cache.store.document(key),
+    ),
   );
 
   /// Asks the group's admins to make the student an admin too. Throws
