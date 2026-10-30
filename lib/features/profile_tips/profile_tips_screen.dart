@@ -5,13 +5,13 @@ import '../../app_services.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
-import '../../core/widgets/offline.dart';
+import '../../core/widgets/insight_age_note.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
 import '../../data/models/leader_insights.dart';
 import '../../data/models/rso.dart';
-import '../../data/repositories/groups_repository.dart';
+import '../../data/repositories/insights_repository.dart';
 import '../shell/track_screen.dart';
 
 class ProfileTipsScreen extends StatefulWidget {
@@ -36,11 +36,12 @@ class _ProfileTipsScreenState extends State<ProfileTipsScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool force = false}) async {
     setState(() => _error = null);
     try {
-      final tips = await context.read<AppServices>().groups.profileTips(
+      final tips = await context.read<AppServices>().insights.profileTips(
         widget.rso.id,
+        force: force,
       );
       if (mounted) setState(() => _tips = tips);
     } on ApiException catch (e) {
@@ -63,7 +64,7 @@ class _ProfileTipsScreenState extends State<ProfileTipsScreen> {
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _load,
+          onRefresh: () => _load(force: true),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
               kPageGutter,
@@ -109,7 +110,7 @@ class _ProfileTipsScreenState extends State<ProfileTipsScreen> {
               if (_error case final error?)
                 ErrorBlock(
                   message: error,
-                  onRetry: _load,
+                  onRetry: () => _load(force: true),
                   offlineMessage:
                       'These tips are worked out from what students do in the '
                       'app, so they need a connection.',
@@ -126,8 +127,8 @@ class _ProfileTipsScreenState extends State<ProfileTipsScreen> {
   }
 
   List<Widget> _content(ProfileTips tips) => [
-    SavedCopyNote(
-      dataKeys: [GroupsRepository.profileTipsKey(widget.rso.id)],
+    InsightAgeNote(
+      dataKeys: [InsightKeys.profileTips(widget.rso.id)],
       message: "These tips update when you're online.",
       padding: const EdgeInsets.only(bottom: 12),
     ),
