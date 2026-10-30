@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../app_services.dart';
 import '../../core/assets/asset_catalog.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
@@ -9,6 +10,7 @@ import '../../core/widgets/offline.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
 import '../../data/api/api_client.dart';
+import '../../data/location/location_service.dart';
 import '../../data/models/student_profile.dart';
 import '../../state/app_state.dart';
 import '../../state/outdoor_mode.dart';
@@ -419,6 +421,32 @@ class _LocationRow extends StatelessWidget {
     );
     if (!online || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
+    if (optIn) {
+      final location = context.read<AppServices>().location;
+      final fix = await location.current();
+      final problem = fix.problem;
+      if (!context.mounted) return;
+      if (problem == LocationProblem.denied ||
+          problem == LocationProblem.deniedForever ||
+          problem == LocationProblem.serviceOff) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              problem == LocationProblem.denied
+                  ? 'Location permission is needed to turn this on.'
+                  : 'Location is blocked. Change it in the phone settings.',
+            ),
+            action: problem == LocationProblem.denied
+                ? null
+                : SnackBarAction(
+                    label: 'Settings',
+                    onPressed: () => location.openSettings(problem!),
+                  ),
+          ),
+        );
+        return;
+      }
+    }
     try {
       await context.read<AppState>().setLocationOptIn(optIn);
     } on ApiException catch (e) {

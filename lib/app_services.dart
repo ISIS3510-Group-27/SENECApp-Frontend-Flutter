@@ -18,17 +18,21 @@ import 'data/local/offline_cache.dart';
 import 'data/local/sqlite_local_store.dart';
 import 'data/location/location_service.dart';
 import 'data/local/cover_outbox_store.dart';
+import 'data/local/insight_store.dart';
 import 'data/location/maps_service.dart';
 import 'data/push/push_service.dart';
 import 'data/reminders/reminder_notifications.dart';
 import 'data/repositories/catalog_repository.dart';
 import 'data/repositories/events_repository.dart';
 import 'data/repositories/groups_repository.dart';
+import 'data/repositories/insights_repository.dart';
 import 'data/repositories/me_repository.dart';
 import 'data/repositories/notifications_repository.dart';
 import 'data/repositories/recommendations_repository.dart';
 import 'data/sensors/ambient_light.dart';
+import 'state/cover_updates.dart';
 import 'data/storage/photo_picker.dart';
+import 'firebase_options.dart';
 
 /// The long-lived objects that talk to the outside world, built once at launch.
 ///
@@ -51,9 +55,11 @@ class AppServices {
     this.covers,
     EventDraftStore? eventDrafts,
     CoverOutboxStore? coverOutbox,
+    InsightStore? insightStore,
   }) : analytics = analytics ?? Analytics(api: api, context: api.context),
        eventDrafts = eventDrafts ?? MemoryEventDraftStore(),
        coverOutbox = coverOutbox ?? MemoryCoverOutboxStore(),
+       insightStore = insightStore ?? MemoryInsightStore(),
        offline = OfflineCache(store: store),
        recommendations = RecommendationsRepository(api);
 
@@ -92,6 +98,10 @@ class AppServices {
 
   final CoverOutboxStore coverOutbox;
 
+  final InsightStore insightStore;
+
+  final CoverUpdates coverUpdates = CoverUpdates();
+
   /// Whether the phone has a network, and when that changes.
   final ConnectivityService connectivity;
 
@@ -100,6 +110,10 @@ class AppServices {
   final OfflineCache offline;
 
   late final MeRepository me = MeRepository(api, cache: offline);
+  late final InsightsRepository insights = InsightsRepository(
+    api: api,
+    store: insightStore,
+  );
   late final GroupsRepository groups = GroupsRepository(
     api,
     cache: offline,
@@ -120,7 +134,9 @@ class AppServices {
       case AuthMode.firebase:
         // Reads google-services.json (Android) / GoogleService-Info.plist
         // (iOS), which `flutterfire configure` adds to the project.
-        await Firebase.initializeApp();
+        await Firebase.initializeApp(
+          options: kIsWeb ? DefaultFirebaseOptions.currentPlatform : null,
+        );
         auth = FirebaseAuthService();
       case AuthMode.dev:
         auth = DevAuthService(prefs);
@@ -168,6 +184,7 @@ class AppServices {
       coverOutbox: kIsWeb
           ? MemoryCoverOutboxStore()
           : SqliteCoverOutboxStore(),
+      insightStore: kIsWeb ? MemoryInsightStore() : FileInsightStore(),
     );
   }
 }

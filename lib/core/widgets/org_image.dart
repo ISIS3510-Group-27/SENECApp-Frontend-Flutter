@@ -1,8 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../data/local/cover_cache.dart';
 import '../../data/models/rso.dart';
+import '../../state/cover_updates.dart';
 import '../assets/asset_catalog.dart';
 import '../theme/app_colors.dart';
 
@@ -25,7 +27,8 @@ class OrgImage extends StatelessWidget {
     final fallback = _Fallback(rso: rso, iconSize: iconSize);
 
     // An uploaded photo, from the phone's copy when it's there.
-    if (CoverCache.urlFor(rso) case final url?) {
+    final fresh = context.watch<CoverUpdates?>()?.latest(rso.id);
+    if (fresh ?? CoverCache.urlFor(rso) case final url?) {
       return CachedNetworkImage(
         imageUrl: url,
         cacheManager: CoverCache.shared,
