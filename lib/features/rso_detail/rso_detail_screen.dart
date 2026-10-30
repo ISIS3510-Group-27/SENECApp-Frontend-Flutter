@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_services.dart';
@@ -23,6 +24,7 @@ import '../../data/repositories/groups_repository.dart';
 import '../../data/storage/photo_picker.dart';
 import '../../state/app_state.dart';
 import '../../state/connection_status.dart';
+import '../../state/cover_outbox.dart';
 import '../create_event/create_event_screen.dart';
 import '../event_detail/event_detail_screen.dart';
 import '../profile_tips/profile_tips_screen.dart';
@@ -745,6 +747,31 @@ class _LeaderTools extends StatefulWidget {
 }
 
 class _LeaderToolsState extends State<_LeaderTools> {
+  StreamSubscription<CoverResult>? _coverResults;
+
+  @override
+  void initState() {
+    super.initState();
+    _coverResults = context.read<CoverOutbox>().results.listen(_onCover);
+  }
+
+  @override
+  void dispose() {
+    _coverResults?.cancel();
+    super.dispose();
+  }
+
+  void _onCover(CoverResult result) {
+    if (!mounted || result.groupId != widget.rso.id) return;
+    final message = result.uploaded
+        ? 'Cover photo updated.'
+        : (result.message ?? "The cover photo couldn't be uploaded.");
+    if (result.uploaded) widget.vm.load();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _createEvent() async {
     final created = await Navigator.of(
       context,
@@ -753,14 +780,6 @@ class _LeaderToolsState extends State<_LeaderTools> {
   }
 
   Future<void> _changePhoto() async {
-    final online = await ensureOnline(
-      context,
-      title: 'Changing the photo needs a connection',
-      message:
-          'The new photo is uploaded to SENECApp for every member to see. '
-          "Try again when you're back online.",
-    );
-    if (!online || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     if (!widget.vm.canPickPhotos) {
       messenger.showSnackBar(
@@ -800,9 +819,25 @@ class _LeaderToolsState extends State<_LeaderTools> {
     );
     if (source == null || !mounted) return;
 
-    final message = await widget.vm.changeCover(source);
-    if (message != null) {
-      messenger.showSnackBar(SnackBar(content: Text(message)));
+    final outbox = context.read<CoverOutbox>();
+    final photos = context.read<AppServices>().photos;
+    final Uint8List? bytes;
+    try {
+      bytes = await photos.pick(source);
+    } on PlatformException {
+      messenger.showSnackBar(
+        const SnackBar(content: Text("Couldn't open the camera or gallery.")),
+      );
+      return;
+    }
+    if (bytes == null) return;
+    final result = await outbox.submit(widget.rso.id, bytes);
+    if (result == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Saved on this phone. It uploads when you are online.'),
+        ),
+      );
     }
   }
 
@@ -818,6 +853,14 @@ class _LeaderToolsState extends State<_LeaderTools> {
           onPressed: widget.rso.isApproved ? _createEvent : null,
         ),
         const SizedBox(height: 10),
+        if (context.watch<CoverOutbox>().hasPending(widget.rso.id))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'A new cover photo is waiting for a connection.',
+              style: AppTheme.body(size: 12),
+            ),
+          ),
         PrimaryButton.secondary(
           label: 'Change cover photo',
           busy: widget.vm.uploadingCover,

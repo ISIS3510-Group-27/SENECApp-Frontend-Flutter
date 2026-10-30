@@ -10,6 +10,7 @@ import 'features/auth/verify_email_screen.dart';
 import 'features/shell/home_shell.dart';
 import 'state/app_state.dart';
 import 'state/connection_status.dart';
+import 'state/cover_outbox.dart';
 import 'state/leave_reminders.dart';
 import 'state/outdoor_mode.dart';
 import 'state/push_registration.dart';
@@ -110,6 +111,20 @@ class _SessionGate extends StatelessWidget {
                 locationOptIn: () =>
                     context.read<AppState>().student.locationOptIn,
                 preferences: services.preferences,
+              )..start();
+            },
+          ),
+          ChangeNotifierProvider(
+            lazy: false,
+            create: (context) {
+              final services = context.read<AppServices>();
+              return CoverOutbox(
+                store: services.coverOutbox,
+                account: session.student!.email,
+                upload: (groupId, bytes) async {
+                  await services.groups.uploadCover(groupId, bytes);
+                },
+                reconnected: context.read<ConnectionStatus>().reconnected,
               )..start();
             },
           ),
