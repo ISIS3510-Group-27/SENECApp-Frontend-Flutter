@@ -29,12 +29,13 @@ abstract final class Screens {
   static const myGroups = 'my_groups';
   static const schedule = 'schedule';
   static const adminRequests = 'admin_requests';
+  static const profileTips = 'profile_tips';
 
   /// The `feature` an error on [screen] is filed under (BQ1).
   static String featureOf(String? screen) => switch (screen) {
     login => 'auth',
     discover => 'explore',
-    groupDetail || adminRequests => 'group_profile',
+    groupDetail || adminRequests || profileTips => 'group_profile',
     joinForm => 'join',
     recommendations => 'recommendations',
     freeNow => 'free_now',

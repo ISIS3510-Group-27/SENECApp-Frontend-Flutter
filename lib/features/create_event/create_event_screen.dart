@@ -18,6 +18,7 @@ import '../../data/models/event_draft.dart';
 import '../../data/models/catalog.dart';
 import '../../data/models/leader_insights.dart';
 import '../../data/models/rso.dart';
+import '../../data/repositories/groups_repository.dart';
 import '../shell/track_screen.dart';
 import 'event_draft_view_model.dart';
 
@@ -445,6 +446,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                 const SectionLabel(text: 'Your members can make it'),
                 const SizedBox(height: 10),
                 _BestTimesSection(
+                  groupId: widget.rso.id,
                   bestTimes: _bestTimes,
                   picked: _pickedSlot,
                   onUse: _useSlot,
@@ -453,7 +455,11 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                 const SizedBox(height: 24),
                 const SectionLabel(text: 'Where students engage'),
                 const SizedBox(height: 10),
-                _AudienceSection(audience: _audience, onUse: _useAudienceCell),
+                _AudienceSection(
+                  groupId: widget.rso.id,
+                  audience: _audience,
+                  onUse: _useAudienceCell,
+                ),
                 const SizedBox(height: 28),
                 const SectionLabel(text: 'Title'),
                 const SizedBox(height: 10),
@@ -654,12 +660,14 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
 class _BestTimesSection extends StatelessWidget {
   const _BestTimesSection({
+    required this.groupId,
     required this.bestTimes,
     required this.picked,
     required this.onUse,
     required this.onRetry,
   });
 
+  final int groupId;
   final Future<BestTimes> bestTimes;
   final SuggestedSlot? picked;
   final ValueChanged<SuggestedSlot> onUse;
@@ -693,6 +701,11 @@ class _BestTimesSection extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            SavedCopyNote(
+              dataKeys: [GroupsRepository.bestTimesKey(groupId)],
+              message: "Suggestions come back up to date when you're online.",
+              padding: const EdgeInsets.only(bottom: 10),
+            ),
             Text(
               'Based on the schedules of ${data.membersWithSchedule} of '
               '${data.members} members'
@@ -781,8 +794,13 @@ class _SlotCard extends StatelessWidget {
 }
 
 class _AudienceSection extends StatelessWidget {
-  const _AudienceSection({required this.audience, required this.onUse});
+  const _AudienceSection({
+    required this.groupId,
+    required this.audience,
+    required this.onUse,
+  });
 
+  final int groupId;
   final Future<Audience> audience;
   final ValueChanged<AudienceCell> onUse;
 
@@ -807,6 +825,11 @@ class _AudienceSection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              SavedCopyNote(
+                dataKeys: [GroupsRepository.audienceKey(groupId)],
+                message: "Numbers update when you're online.",
+                padding: const EdgeInsets.only(bottom: 10),
+              ),
               Text(
                 data.answer,
                 style: AppTheme.body(

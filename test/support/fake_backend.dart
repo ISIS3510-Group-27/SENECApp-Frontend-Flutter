@@ -596,6 +596,46 @@ class FakeBackend {
           'by_building': [cell],
         });
 
+      case ('GET', ['groups', final id, 'insights', 'profile']):
+        if (!adminOf.contains(int.parse(id))) {
+          return jsonResponse({'detail': 'Only group admins can do this'}, 403);
+        }
+        Map<String, Object?> field(
+          String name, {
+          required bool filled,
+          int views = 0,
+          double? correlation,
+          double? lift,
+        }) => {
+          'field': name,
+          'filled': filled,
+          'views': views,
+          'correlation': correlation,
+          'lift': lift,
+          'conversion_with': null,
+          'conversion_without': null,
+        };
+        return jsonResponse({
+          'question':
+              'Which fields of a group profile are most correlated with '
+              'students saving or joining the group?',
+          'answer':
+              'Fields most correlated with saving or joining: has_image '
+              '(r=0.31, 1.4x conversion).',
+          'days': 90,
+          'filled': 5,
+          'total': 7,
+          'fields': [
+            field('has_image', filled: false, views: 80, correlation: 0.31, lift: 1.4),
+            field('has_upcoming_event', filled: false),
+            field('has_instagram', filled: true, views: 80, correlation: 0.12, lift: 1.1),
+            field('has_contact_email', filled: true),
+            field('has_website', filled: true),
+            field('has_meeting_building', filled: true),
+            field('has_founded_year', filled: true),
+          ],
+        });
+
       case ('POST', ['groups', final id, 'events']):
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         final group = _groups.firstWhere((g) => g.$1 == int.parse(id));

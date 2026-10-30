@@ -25,6 +25,7 @@ import '../../state/app_state.dart';
 import '../../state/connection_status.dart';
 import '../create_event/create_event_screen.dart';
 import '../event_detail/event_detail_screen.dart';
+import '../profile_tips/profile_tips_screen.dart';
 import '../shell/track_screen.dart';
 import 'admin_requests_screen.dart';
 import 'join_form_sheet.dart';
@@ -824,6 +825,11 @@ class _LeaderToolsState extends State<_LeaderTools> {
         ),
         const SizedBox(height: 10),
         PrimaryButton.secondary(
+          label: 'Improve your profile',
+          onPressed: _openProfileTips,
+        ),
+        const SizedBox(height: 10),
+        PrimaryButton.secondary(
           label: widget.rso.pendingAdminRequests > 0
               ? 'Admin requests (${widget.rso.pendingAdminRequests})'
               : 'Admin requests',
@@ -831,6 +837,10 @@ class _LeaderToolsState extends State<_LeaderTools> {
         ),
       ],
     );
+  }
+
+  void _openProfileTips() {
+    Navigator.of(context).push(ProfileTipsScreen.route(widget.rso));
   }
 
   Future<void> _openAdminRequests() async {
