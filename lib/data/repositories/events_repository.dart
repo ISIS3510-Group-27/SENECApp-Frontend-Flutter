@@ -20,8 +20,15 @@ class EventsRepository {
   final OfflineCache _cache;
 
   /// Like group profiles: going back to an event page is common, and 30 pages
-  /// of a few KB each cost little memory.
-  final _details = LruCache<int, CampusEvent>(capacity: 30);
+  /// of a few KB each cost little memory. After [detailMaxAge] a page isn't
+  /// shown from memory anymore: its attendance, capacity or cancellation may
+  /// have changed.
+  final _details = LruCache<int, CampusEvent>(
+    capacity: 30,
+    maxAge: detailMaxAge,
+  );
+
+  static const detailMaxAge = Duration(minutes: 10);
   int _detailSession = -1;
 
   void _syncDetailSession() {
