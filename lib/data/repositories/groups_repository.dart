@@ -42,7 +42,14 @@ class GroupsRepository {
   /// A student opens a handful of groups per session, and going back to one
   /// is common (list, profile, back, another profile, back to the first). 30
   /// profiles of a few KB each cover a long session for well under 1 MB.
-  final _details = LruCache<int, Rso>(capacity: 30);
+  ///
+  /// [detailMaxAge] bounds how old a page shown this way can be: going back
+  /// within a few minutes shows it at once, but a page opened long ago could
+  /// show a member count, an event or a cover that has changed, so after
+  /// that the screen waits for the live copy (or the saved one, offline).
+  final _details = LruCache<int, Rso>(capacity: 30, maxAge: detailMaxAge);
+
+  static const detailMaxAge = Duration(minutes: 10);
   int _detailSession = -1;
 
   void _syncDetailSession() {
