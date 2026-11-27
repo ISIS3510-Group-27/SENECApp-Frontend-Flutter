@@ -13,6 +13,7 @@ import 'data/auth/firebase_auth_service.dart';
 import 'data/connectivity/connectivity_service.dart';
 import 'data/local/cover_cache.dart';
 import 'data/local/event_draft_store.dart';
+import 'data/local/hive_event_draft_store.dart';
 import 'data/local/local_store.dart';
 import 'data/local/offline_cache.dart';
 import 'data/local/sqlite_local_store.dart';
@@ -191,7 +192,7 @@ class AppServices {
       covers: CoverCache(),
       eventDrafts: kIsWeb
           ? PrefsEventDraftStore(prefs)
-          : SqliteEventDraftStore(),
+          : HiveEventDraftStore(legacy: SqliteEventDraftStore()),
       coverOutbox: kIsWeb ? MemoryCoverOutboxStore() : SqliteCoverOutboxStore(),
       insightStore: kIsWeb ? MemoryInsightStore() : FileInsightStore(),
       joinHistory: kIsWeb ? MemoryJoinHistoryStore() : SqliteJoinHistoryStore(),
