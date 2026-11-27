@@ -15,6 +15,7 @@ import '../../data/models/student_profile.dart';
 import '../../state/app_state.dart';
 import '../../state/outdoor_mode.dart';
 import '../../state/session_controller.dart';
+import '../compare_groups/compare_groups_screen.dart';
 import '../schedule/schedule_screen.dart';
 import '../shell/home_shell.dart';
 import '../shell/track_screen.dart';
@@ -85,6 +86,38 @@ class ProfileScreen extends StatelessWidget {
             student: student,
             joinedCount: state.joinedCount,
             eventsAttended: state.eventsAttended,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: kPageGutter),
+          child: AppCard(
+            padding: EdgeInsets.zero,
+            clipContents: true,
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+              leading: const Icon(
+                Icons.compare_arrows_rounded,
+                color: AppColors.accent,
+              ),
+              title: Text(
+                'Compare recommended groups',
+                style: AppTheme.body(size: 14, weight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                'See which community fits you best',
+                style: AppTheme.body(
+                  size: 12,
+                  color: AppColors.mutedForeground,
+                ),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () =>
+                  Navigator.of(context).push(CompareGroupsScreen.route()),
+            ),
           ),
         ),
         const SizedBox(height: 24),
