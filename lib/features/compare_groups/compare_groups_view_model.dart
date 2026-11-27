@@ -27,6 +27,7 @@ class CompareGroupsViewModel extends ChangeNotifier {
   Future<void>? _inFlight;
   GroupRecommendations? _result;
   String? _error;
+  Object? _failure;
   int? _firstId;
   int? _secondId;
 
@@ -36,6 +37,7 @@ class CompareGroupsViewModel extends ChangeNotifier {
   List<GroupRecommendation> get items => result?.items ?? const [];
   bool get loading => _active && _loading;
   String? get error => _active ? _error : null;
+  Object? get failure => _active ? _failure : null;
   bool get ready => _active && (_result != null || _error != null);
   bool get hasEnoughGroups => items.length >= 2;
 
@@ -59,6 +61,7 @@ class CompareGroupsViewModel extends ChangeNotifier {
 
     _loading = true;
     _error = null;
+    _failure = null;
     final operation = Future<void>.sync(_fetch);
     final tracked = operation.whenComplete(() {
       _inFlight = null;
@@ -89,16 +92,17 @@ class CompareGroupsViewModel extends ChangeNotifier {
       if (_selected(_firstId) == null) _firstId = null;
       if (_selected(_secondId) == null) _secondId = null;
     } on ApiException catch (e) {
-      if (_active) _fail(e.message);
-    } on Exception {
-      if (_active) _fail('Could not load recommendations. Try again.');
+      if (_active) _fail(e, e.message);
+    } on Exception catch (e) {
+      if (_active) _fail(e, 'Could not load recommendations. Try again.');
     }
   }
 
-  void _fail(String message) {
+  void _fail(Object failure, String message) {
     // An old response must not remain actionable after a failed refresh.
     _result = null;
     _error = message;
+    _failure = failure;
   }
 
   GroupRecommendation? _selected(int? id) {

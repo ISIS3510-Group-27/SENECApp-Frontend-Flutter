@@ -31,6 +31,7 @@ abstract final class Screens {
   static const adminRequests = 'admin_requests';
   static const profileTips = 'profile_tips';
   static const joinSources = 'join_sources';
+  static const compareGroups = 'compare_groups';
 
   /// The `feature` an error on [screen] is filed under (BQ1).
   static String featureOf(String? screen) => switch (screen) {
@@ -41,7 +42,7 @@ abstract final class Screens {
     profileTips ||
     joinSources => 'group_profile',
     joinForm => 'join',
-    recommendations => 'recommendations',
+    recommendations || compareGroups => 'recommendations',
     freeNow => 'free_now',
     events || eventDetail || createEvent => 'events',
     checkInScanner => 'check_in',
