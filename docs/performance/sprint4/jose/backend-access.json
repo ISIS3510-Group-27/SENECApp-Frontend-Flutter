@@ -1,0 +1,16 @@
+{
+  "authenticated": false,
+  "checks": [
+    {
+      "endpoint": "/api/v1/health/db",
+      "status": 200,
+      "body": "{\"status\":\"ok\",\"database\":\"ok\"}"
+    },
+    {
+      "endpoint": "/api/v1/analytics/bq/6?days=30",
+      "status": 401,
+      "body": "{\"detail\":\"Missing bearer token\"}"
+    }
+  ],
+  "note": "No test account or administrator session was available; no production joins were attempted."
+}

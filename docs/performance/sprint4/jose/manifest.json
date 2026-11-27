@@ -1,0 +1,12 @@
+{
+  "source_revision": "20ac47f85427c81552f5f0e6da12f1f18c658e0a",
+  "before_sha256": "5f41646e6572199a91336277844ed1df215417da597a3c2e3d9bb8ff15e6d114",
+  "measurement_target": "temporary Android ARM emulator; not physical hardware",
+  "fixture_sizes": [
+    50,
+    160
+  ],
+  "iterations": 5000,
+  "rounds_per_run": 3,
+  "after_sha256": "d4e6a4c2837c3b103ba7a9c38c8b3c2fef3472129a48cbea5311d404efa3ed56"
+}

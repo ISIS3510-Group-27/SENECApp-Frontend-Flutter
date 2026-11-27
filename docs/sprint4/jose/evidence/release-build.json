@@ -1,0 +1,31 @@
+{
+  "source_revision": "20ac47f85427c81552f5f0e6da12f1f18c658e0a",
+  "working_tree_delta": "event_filters.dart optimization; source changes remain uncommitted",
+  "build_mode": "release",
+  "target": "lib/main.dart",
+  "flutter": "3.47.4",
+  "java": "17",
+  "api_base_url": "https://35-170-175-16.sslip.io/api/v1",
+  "auth_mode": "firebase",
+  "firebase_project": "senecapp",
+  "application_id": "co.edu.uniandes.senecapp",
+  "bytes": 59824744,
+  "sha256": "dbc93f10e71a780228682fd5d7970bc0a60848df4f57581a91af09307f7efc4a",
+  "signing": "Existing debug signing configuration; internal/course artifact, not production signing",
+  "diagnostic_font_assets": false,
+  "production_sign_in_verified": false,
+  "distribution_uploaded": false,
+  "native_library_directories": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86_64"
+  ],
+  "supported_flutter_abis": [
+    "arm64-v8a",
+    "armeabi-v7a"
+  ],
+  "emulator_install_verified": true,
+  "emulator_startup_screen": "Welcome back / university sign-in",
+  "startup_fatal_exception_observed": false,
+  "emulator_limitations": "AOSP ATD image has no Google Play services; real authentication not exercised"
+}
