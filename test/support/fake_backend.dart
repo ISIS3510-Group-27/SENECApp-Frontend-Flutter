@@ -51,6 +51,13 @@ class FakeBackend {
   /// admin of that group sees).
   final Map<int, List<Map<String, dynamic>>> adminRequests;
 
+  /// Times `GET /groups/{id}/insights/join-sources` answered (BQ6).
+  int joinSourcesServed = 0;
+
+  /// Extra recommendation joins in the next BQ6 answers, to simulate students
+  /// joining between two visits.
+  int joinSourcesExtra = 0;
+
   /// Groups where the student asked to become admin and is waiting.
   final Set<int> requestedAdmin = {};
 
@@ -594,6 +601,95 @@ class FakeBackend {
           'best_time_and_place': [cell],
           'by_hour': [cell],
           'by_building': [cell],
+        });
+
+      case ('GET', ['groups', final id, 'insights', 'profile']):
+        if (!adminOf.contains(int.parse(id))) {
+          return jsonResponse({'detail': 'Only group admins can do this'}, 403);
+        }
+        Map<String, Object?> field(
+          String name, {
+          required bool filled,
+          int views = 0,
+          double? correlation,
+          double? lift,
+        }) => {
+          'field': name,
+          'filled': filled,
+          'views': views,
+          'correlation': correlation,
+          'lift': lift,
+          'conversion_with': null,
+          'conversion_without': null,
+        };
+        return jsonResponse({
+          'question':
+              'Which fields of a group profile are most correlated with '
+              'students saving or joining the group?',
+          'answer':
+              'Fields most correlated with saving or joining: has_image '
+              '(r=0.31, 1.4x conversion).',
+          'days': 90,
+          'filled': 5,
+          'total': 7,
+          'fields': [
+            field(
+              'has_image',
+              filled: false,
+              views: 80,
+              correlation: 0.31,
+              lift: 1.4,
+            ),
+            field('has_upcoming_event', filled: false),
+            field(
+              'has_instagram',
+              filled: true,
+              views: 80,
+              correlation: 0.12,
+              lift: 1.1,
+            ),
+            field('has_contact_email', filled: true),
+            field('has_website', filled: true),
+            field('has_meeting_building', filled: true),
+            field('has_founded_year', filled: true),
+          ],
+        });
+
+      case ('GET', ['groups', final id, 'insights', 'join-sources']):
+        if (!adminOf.contains(int.parse(id))) {
+          return jsonResponse({'detail': 'Only group admins can do this'}, 403);
+        }
+        joinSourcesServed++;
+        Map<String, Object?> source(
+          String entryPoint,
+          int views,
+          int joins,
+          double campus,
+        ) => {
+          'entry_point': entryPoint,
+          'views': views,
+          'joins': joins,
+          'view_to_join_rate': joins / views,
+          'share_of_joins': joins / (8 + joinSourcesExtra),
+          'campus_view_to_join_rate': campus,
+        };
+        return jsonResponse({
+          'question':
+              'Which entry point produces more joins: personalized '
+              'recommendations, or search and filters?',
+          'answer':
+              'Most of your joins come from recommendations '
+              '(${5 + joinSourcesExtra} of ${8 + joinSourcesExtra}).',
+          'campus_answer':
+              'Recommendation produces more joins (310 vs 190; view-to-join '
+              '12.0% vs 8.5%).',
+          'days': 90,
+          'views': 60,
+          'joins': 8 + joinSourcesExtra,
+          'sources': [
+            source('recommendation', 25, 5 + joinSourcesExtra, 0.12),
+            source('search', 35, 3, 0.085),
+          ],
         });
 
       case ('POST', ['groups', final id, 'events']):

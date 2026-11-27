@@ -51,6 +51,75 @@ void main() {
 
       expect((cache.hits, cache.misses), (1, 1));
     });
+
+    group('with an expiration', () {
+      var now = DateTime(2026, 10, 30, 10);
+      LruCache<int, String> cache() => LruCache<int, String>(
+        capacity: 3,
+        maxAge: const Duration(minutes: 10),
+        clock: () => now,
+      );
+
+      setUp(() => now = DateTime(2026, 10, 30, 10));
+
+      test('an entry is valid until maxAge, then dropped', () {
+        final c = cache()..[1] = 'one';
+
+        now = now.add(const Duration(minutes: 9, seconds: 59));
+        expect(c[1], 'one');
+
+        now = now.add(const Duration(seconds: 1));
+        expect(c[1], isNull);
+        expect(c.length, 0); // Removed when read, not kept around.
+        expect((c.hits, c.misses, c.expired), (1, 0, 1));
+      });
+
+      test('reading an entry does not restart its age, writing it does', () {
+        final c = cache()..[1] = 'one';
+
+        now = now.add(const Duration(minutes: 8));
+        expect(c[1], 'one'); // A read only moves it in the LRU order.
+        now = now.add(const Duration(minutes: 3));
+        expect(c[1], isNull);
+
+        c[1] = 'uno';
+        now = now.add(const Duration(minutes: 9));
+        expect(c[1], 'uno');
+      });
+
+      test('containsKey ignores expired entries without counting', () {
+        final c = cache()..[1] = 'one';
+        expect(c.containsKey(1), isTrue);
+
+        now = now.add(const Duration(minutes: 10));
+        expect(c.containsKey(1), isFalse);
+        expect((c.hits, c.misses, c.expired), (0, 0, 0));
+      });
+
+      test('size and age limits work together', () {
+        final c = cache()
+          ..[1] = 'one'
+          ..[2] = 'two'
+          ..[3] = 'three'
+          ..[4] = 'four'; // Full: 1, the least recently used, is evicted.
+
+        expect(c[1], isNull);
+        expect(c.misses, 1);
+        now = now.add(const Duration(minutes: 10));
+        expect([c[2], c[3], c[4]], [null, null, null]);
+        expect(c.expired, 3);
+      });
+    });
+
+    test('without maxAge nothing expires', () {
+      var now = DateTime(2026, 10, 30);
+      final c = LruCache<int, String>(capacity: 1, clock: () => now)
+        ..[1] = 'one';
+
+      now = now.add(const Duration(days: 365));
+      expect(c[1], 'one');
+      expect(c.expired, 0);
+    });
   });
 
   group('Offline copy', () {

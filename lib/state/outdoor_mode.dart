@@ -15,8 +15,8 @@ class OutdoorMode extends ChangeNotifier with WidgetsBindingObserver {
   }) : _sensor = sensor,
        _preferences = preferences;
 
-  static const enterLux = 10000.0;
-  static const exitLux = 3000.0;
+  static const enterLux = 4000.0;
+  static const exitLux = 1500.0;
   static const _settingKey = 'outdoor_mode.setting';
 
   final AmbientLightSensor _sensor;

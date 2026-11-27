@@ -4,12 +4,14 @@ import 'package:provider/provider.dart';
 import 'app_services.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/phone_frame.dart';
+import 'data/repositories/insights_repository.dart';
 import 'features/auth/session_status_screens.dart';
 import 'features/auth/sign_in_screen.dart';
 import 'features/auth/verify_email_screen.dart';
 import 'features/shell/home_shell.dart';
 import 'state/app_state.dart';
 import 'state/connection_status.dart';
+import 'state/cover_outbox.dart';
 import 'state/leave_reminders.dart';
 import 'state/outdoor_mode.dart';
 import 'state/push_registration.dart';
@@ -30,6 +32,7 @@ class SenecApp extends StatelessWidget {
           create: (_) => ConnectionStatus(services.connectivity)..start(),
         ),
         ChangeNotifierProvider.value(value: services.offline.freshness),
+        ChangeNotifierProvider.value(value: services.coverUpdates),
         ChangeNotifierProvider(
           create: (_) => SessionController(
             auth: services.auth,
@@ -113,9 +116,54 @@ class _SessionGate extends StatelessWidget {
               )..start();
             },
           ),
+          Provider<_InsightsLease>(
+            lazy: false,
+            create: (context) => _InsightsLease(
+              context.read<AppServices>(),
+              session.student!.email,
+            ),
+            dispose: (_, lease) => lease.release(),
+          ),
+          ChangeNotifierProvider(
+            lazy: false,
+            create: (context) {
+              final services = context.read<AppServices>();
+              return CoverOutbox(
+                store: services.coverOutbox,
+                account: session.student!.email,
+                upload: (groupId, bytes) async {
+                  final updated = await services.groups.uploadCover(
+                    groupId,
+                    bytes,
+                  );
+                  services.coverUpdates.record(groupId, updated.imageUrl);
+                  await services.insights.forget(
+                    InsightKeys.profileTips(groupId),
+                  );
+                },
+                reconnected: context.read<ConnectionStatus>().reconnected,
+              )..start();
+            },
+          ),
         ],
         child: const HomeShell(),
       ),
     };
+  }
+}
+
+/// Leader insights (Daniel's and BQ6) belong to the signed-in account while
+/// the home screen is up.
+class _InsightsLease {
+  _InsightsLease(this._services, String account) {
+    _services.insights.useAccount(account);
+    _services.joinSources.useAccount(account);
+  }
+
+  final AppServices _services;
+
+  void release() {
+    _services.insights.useAccount(null);
+    _services.joinSources.useAccount(null);
   }
 }

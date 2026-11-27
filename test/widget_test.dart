@@ -84,7 +84,17 @@ void main() {
 
     await tester.tap(find.text('Round Robin Tournament'));
     await tester.pumpAndSettle();
+    // Fake events are scheduled relative to now, so on some days the page
+    // also shows a class-conflict card that pushes this section down.
+    await tester.scrollUntilVisible(
+      find.text('HOSTED BY'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.text('HOSTED BY'), findsOneWidget);
+    // Back to the top, where the back button is.
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, 3000));
+    await tester.pumpAndSettle();
 
     await tester.pageBack();
     await tester.pumpAndSettle();

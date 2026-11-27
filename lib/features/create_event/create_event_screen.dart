@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/async_states.dart';
+import '../../core/widgets/insight_age_note.dart';
 import '../../core/widgets/offline.dart';
 import '../../core/widgets/selectable_chip.dart';
 import '../../core/widgets/surfaces.dart';
@@ -18,6 +19,7 @@ import '../../data/models/event_draft.dart';
 import '../../data/models/catalog.dart';
 import '../../data/models/leader_insights.dart';
 import '../../data/models/rso.dart';
+import '../../data/repositories/insights_repository.dart';
 import '../shell/track_screen.dart';
 import 'event_draft_view_model.dart';
 
@@ -60,7 +62,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   late Future<BestTimes> _bestTimes = _loadBestTimes();
   late final Future<Audience> _audience = context
       .read<AppServices>()
-      .groups
+      .insights
       .audience(widget.rso.id);
 
   SuggestedSlot? _pickedSlot;
@@ -121,10 +123,10 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     _pickedSlot = null;
   });
 
-  Future<BestTimes> _loadBestTimes() => context
+  Future<BestTimes> _loadBestTimes({bool force = false}) => context
       .read<AppServices>()
-      .groups
-      .bestTimes(widget.rso.id, length: _length);
+      .insights
+      .bestTimes(widget.rso.id, length: _length, force: force);
 
   DateTime? get _startsAt {
     final date = _date;
@@ -445,15 +447,22 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                 const SectionLabel(text: 'Your members can make it'),
                 const SizedBox(height: 10),
                 _BestTimesSection(
+                  groupId: widget.rso.id,
+                  length: _length,
                   bestTimes: _bestTimes,
                   picked: _pickedSlot,
                   onUse: _useSlot,
-                  onRetry: () => setState(() => _bestTimes = _loadBestTimes()),
+                  onRetry: () =>
+                      setState(() => _bestTimes = _loadBestTimes(force: true)),
                 ),
                 const SizedBox(height: 24),
                 const SectionLabel(text: 'Where students engage'),
                 const SizedBox(height: 10),
-                _AudienceSection(audience: _audience, onUse: _useAudienceCell),
+                _AudienceSection(
+                  groupId: widget.rso.id,
+                  audience: _audience,
+                  onUse: _useAudienceCell,
+                ),
                 const SizedBox(height: 28),
                 const SectionLabel(text: 'Title'),
                 const SizedBox(height: 10),
@@ -654,12 +663,16 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
 class _BestTimesSection extends StatelessWidget {
   const _BestTimesSection({
+    required this.groupId,
+    required this.length,
     required this.bestTimes,
     required this.picked,
     required this.onUse,
     required this.onRetry,
   });
 
+  final int groupId;
+  final Duration length;
   final Future<BestTimes> bestTimes;
   final SuggestedSlot? picked;
   final ValueChanged<SuggestedSlot> onUse;
@@ -693,6 +706,11 @@ class _BestTimesSection extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            InsightAgeNote(
+              dataKeys: [InsightKeys.bestTimes(groupId, length)],
+              message: "Suggestions come back up to date when you're online.",
+              padding: const EdgeInsets.only(bottom: 10),
+            ),
             Text(
               'Based on the schedules of ${data.membersWithSchedule} of '
               '${data.members} members'
@@ -781,8 +799,13 @@ class _SlotCard extends StatelessWidget {
 }
 
 class _AudienceSection extends StatelessWidget {
-  const _AudienceSection({required this.audience, required this.onUse});
+  const _AudienceSection({
+    required this.groupId,
+    required this.audience,
+    required this.onUse,
+  });
 
+  final int groupId;
   final Future<Audience> audience;
   final ValueChanged<AudienceCell> onUse;
 
@@ -807,6 +830,11 @@ class _AudienceSection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              InsightAgeNote(
+                dataKeys: [InsightKeys.audience(groupId)],
+                message: "Numbers update when you're online.",
+                padding: const EdgeInsets.only(bottom: 10),
+              ),
               Text(
                 data.answer,
                 style: AppTheme.body(
