@@ -28,6 +28,7 @@ import 'data/repositories/notifications_repository.dart';
 import 'data/repositories/recommendations_repository.dart';
 import 'data/sensors/ambient_light.dart';
 import 'data/storage/photo_picker.dart';
+import 'firebase_options.dart';
 
 /// The long-lived objects that talk to the outside world, built once at launch.
 ///
@@ -113,9 +114,10 @@ class AppServices {
     final AuthService auth;
     switch (AppConfig.authMode) {
       case AuthMode.firebase:
-        // Reads google-services.json (Android) / GoogleService-Info.plist
-        // (iOS), which `flutterfire configure` adds to the project.
-        await Firebase.initializeApp();
+        // Web needs explicit options; use the generated config on each platform.
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
         auth = FirebaseAuthService();
       case AuthMode.dev:
         auth = DevAuthService(prefs);
