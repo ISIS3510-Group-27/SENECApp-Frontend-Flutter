@@ -27,6 +27,7 @@ import '../../state/connection_status.dart';
 import '../../state/cover_outbox.dart';
 import '../create_event/create_event_screen.dart';
 import '../event_detail/event_detail_screen.dart';
+import '../join_sources/join_sources_screen.dart';
 import '../profile_tips/profile_tips_screen.dart';
 import '../shell/track_screen.dart';
 import 'admin_requests_screen.dart';
@@ -873,6 +874,11 @@ class _LeaderToolsState extends State<_LeaderTools> {
         ),
         const SizedBox(height: 10),
         PrimaryButton.secondary(
+          label: 'Where your members come from',
+          onPressed: widget.rso.isApproved ? _openJoinSources : null,
+        ),
+        const SizedBox(height: 10),
+        PrimaryButton.secondary(
           label: widget.rso.pendingAdminRequests > 0
               ? 'Admin requests (${widget.rso.pendingAdminRequests})'
               : 'Admin requests',
@@ -884,6 +890,10 @@ class _LeaderToolsState extends State<_LeaderTools> {
 
   void _openProfileTips() {
     Navigator.of(context).push(ProfileTipsScreen.route(widget.rso));
+  }
+
+  void _openJoinSources() {
+    Navigator.of(context).push(JoinSourcesScreen.route(widget.rso));
   }
 
   Future<void> _openAdminRequests() async {

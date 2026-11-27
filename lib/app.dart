@@ -119,7 +119,7 @@ class _SessionGate extends StatelessWidget {
           Provider<_InsightsLease>(
             lazy: false,
             create: (context) => _InsightsLease(
-              context.read<AppServices>().insights,
+              context.read<AppServices>(),
               session.student!.email,
             ),
             dispose: (_, lease) => lease.release(),
@@ -152,12 +152,18 @@ class _SessionGate extends StatelessWidget {
   }
 }
 
+/// Leader insights (Daniel's and BQ6) belong to the signed-in account while
+/// the home screen is up.
 class _InsightsLease {
-  _InsightsLease(this._insights, String account) {
-    _insights.useAccount(account);
+  _InsightsLease(this._services, String account) {
+    _services.insights.useAccount(account);
+    _services.joinSources.useAccount(account);
   }
 
-  final InsightsRepository _insights;
+  final AppServices _services;
 
-  void release() => _insights.useAccount(null);
+  void release() {
+    _services.insights.useAccount(null);
+    _services.joinSources.useAccount(null);
+  }
 }

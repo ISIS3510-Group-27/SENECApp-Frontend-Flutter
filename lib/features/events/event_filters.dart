@@ -19,7 +19,7 @@ List<CampusEvent> filterEvents({
   final terms = query
       .trim()
       .toLowerCase()
-      .split(RegExp(r'\s+'))
+      .split(_spaces)
       .where((term) => term.isNotEmpty)
       .toList();
 
@@ -28,12 +28,7 @@ List<CampusEvent> filterEvents({
     if (!_matchesDate(event, dateFilter, now)) return false;
     if (terms.isEmpty) return true;
 
-    final haystack = [
-      event.title,
-      event.rsoName,
-      event.location,
-    ].join(' ').toLowerCase();
-    return terms.every(haystack.contains);
+    return terms.every(_searchText(event).contains);
   }).toList();
 
   if (terms.isNotEmpty || dateFilter != EventDateFilter.any) {
@@ -44,6 +39,20 @@ List<CampusEvent> filterEvents({
   }
   return filtered;
 }
+
+final _spaces = RegExp(r'\s+');
+
+/// Micro-optimization (Sprint 4): the lower-cased text an event is searched
+/// by, built once per event object instead of on every keystroke. An
+/// [Expando] attaches it to the event without changing the model, and lets it
+/// go with the event when a new list replaces it.
+final _searchTexts = Expando<String>('event search text');
+
+String _searchText(CampusEvent event) => _searchTexts[event] ??= [
+  event.title,
+  event.rsoName,
+  event.location,
+].join(' ').toLowerCase();
 
 bool eventIsInNextSevenDays(CampusEvent event, DateTime now) =>
     _matchesDate(event, EventDateFilter.nextSevenDays, now);
