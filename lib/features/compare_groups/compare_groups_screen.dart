@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_services.dart';
+import '../../core/format/dates.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/async_states.dart';
@@ -9,8 +12,10 @@ import '../../core/widgets/offline.dart';
 import '../../core/widgets/org_image.dart';
 import '../../core/widgets/surfaces.dart';
 import '../../data/analytics/analytics.dart';
+import '../../data/local/recommendation_snapshot_store.dart';
 import '../../data/models/entry_point.dart';
 import '../../data/models/recommendation.dart';
+import '../../state/connection_status.dart';
 import '../rso_detail/rso_detail_screen.dart';
 import '../shell/track_screen.dart';
 import 'compare_groups_view_model.dart';
@@ -32,17 +37,31 @@ class _CompareGroupsScreenState extends State<CompareGroupsScreen> {
     return CompareGroupsViewModel(
       recommendations: services.recommendations,
       sessionVersion: () => services.offline.sessionVersion,
+      snapshots: RecommendationSnapshotStore(store: services.offline.store),
+      isOnline: () => isOnline(context, listen: false),
     );
   }();
+
+  StreamSubscription<void>? _reconnected;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _reconnected = context.read<ConnectionStatus?>()?.reconnected.listen((
+      _,
+    ) async {
+      await _vm.refreshAfterReconnect();
+      _reportFailure();
+    });
   }
 
   Future<void> _load() async {
     await _vm.load();
+    _reportFailure();
+  }
+
+  void _reportFailure() {
     if (!mounted) return;
     if (_vm.failure case final error?) {
       context.read<AppServices>().analytics.error(
@@ -73,6 +92,7 @@ class _CompareGroupsScreenState extends State<CompareGroupsScreen> {
 
   @override
   void dispose() {
+    _reconnected?.cancel();
     _vm.dispose();
     super.dispose();
   }
@@ -130,7 +150,13 @@ class _CompareGroupsScreenState extends State<CompareGroupsScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (!online) ...[
+            if (_vm.savedAt case final savedAt?) ...[
+              OfflineNote(
+                'Showing recommendations saved ${Dates.ago(savedAt)}. '
+                'You can compare them. Refresh with a connection to open an organization.',
+              ),
+              const SizedBox(height: 16),
+            ] else if (!online) ...[
               const OfflineNote(
                 'Reconnect to refresh recommendations and open an organization.',
               ),
@@ -139,10 +165,12 @@ class _CompareGroupsScreenState extends State<CompareGroupsScreen> {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
-                onPressed: _vm.loading || !online ? null : _load,
+                onPressed: _vm.loading ? null : _load,
                 style: TextButton.styleFrom(foregroundColor: AppColors.accent),
                 icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Refresh recommendations'),
+                label: Text(
+                  _vm.fromCache ? 'Retry' : 'Refresh recommendations',
+                ),
               ),
             ),
             if (_vm.loading)
