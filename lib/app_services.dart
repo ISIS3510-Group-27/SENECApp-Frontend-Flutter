@@ -19,6 +19,7 @@ import 'data/local/sqlite_local_store.dart';
 import 'data/location/location_service.dart';
 import 'data/local/cover_outbox_store.dart';
 import 'data/local/insight_store.dart';
+import 'data/local/join_history_store.dart';
 import 'data/location/maps_service.dart';
 import 'data/push/push_service.dart';
 import 'data/reminders/reminder_notifications.dart';
@@ -26,6 +27,7 @@ import 'data/repositories/catalog_repository.dart';
 import 'data/repositories/events_repository.dart';
 import 'data/repositories/groups_repository.dart';
 import 'data/repositories/insights_repository.dart';
+import 'data/repositories/join_sources_repository.dart';
 import 'data/repositories/me_repository.dart';
 import 'data/repositories/notifications_repository.dart';
 import 'data/repositories/recommendations_repository.dart';
@@ -56,10 +58,12 @@ class AppServices {
     EventDraftStore? eventDrafts,
     CoverOutboxStore? coverOutbox,
     InsightStore? insightStore,
+    JoinHistoryStore? joinHistory,
   }) : analytics = analytics ?? Analytics(api: api, context: api.context),
        eventDrafts = eventDrafts ?? MemoryEventDraftStore(),
        coverOutbox = coverOutbox ?? MemoryCoverOutboxStore(),
        insightStore = insightStore ?? MemoryInsightStore(),
+       joinHistory = joinHistory ?? MemoryJoinHistoryStore(),
        offline = OfflineCache(store: store),
        recommendations = RecommendationsRepository(api);
 
@@ -100,6 +104,9 @@ class AppServices {
 
   final InsightStore insightStore;
 
+  /// The BQ6 answers a leader saw, kept to open offline and compare visits.
+  final JoinHistoryStore joinHistory;
+
   final CoverUpdates coverUpdates = CoverUpdates();
 
   /// Whether the phone has a network, and when that changes.
@@ -113,6 +120,10 @@ class AppServices {
   late final InsightsRepository insights = InsightsRepository(
     api: api,
     store: insightStore,
+  );
+  late final JoinSourcesRepository joinSources = JoinSourcesRepository(
+    api: api,
+    store: joinHistory,
   );
   late final GroupsRepository groups = GroupsRepository(
     api,
@@ -181,10 +192,9 @@ class AppServices {
       eventDrafts: kIsWeb
           ? PrefsEventDraftStore(prefs)
           : SqliteEventDraftStore(),
-      coverOutbox: kIsWeb
-          ? MemoryCoverOutboxStore()
-          : SqliteCoverOutboxStore(),
+      coverOutbox: kIsWeb ? MemoryCoverOutboxStore() : SqliteCoverOutboxStore(),
       insightStore: kIsWeb ? MemoryInsightStore() : FileInsightStore(),
+      joinHistory: kIsWeb ? MemoryJoinHistoryStore() : SqliteJoinHistoryStore(),
     );
   }
 }

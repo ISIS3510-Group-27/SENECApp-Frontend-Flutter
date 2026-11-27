@@ -149,7 +149,14 @@ class _EventsScreenState extends State<EventsScreen> {
     final vm = _vm;
     final events = vm.events;
     final error = vm.error;
-    final appState = context.watch<AppState>();
+    // Micro-optimization (Sprint 4): this screen used to `watch` all of
+    // AppState, so any change there (an unread count, a group joined, one
+    // event being saved) rebuilt the whole list. Now it only depends on the
+    // saved events while the Saved view is shown; each card listens to its
+    // own saved state ([_EventSaveState]).
+    context.select<AppState, String?>(
+      (state) => vm.savedOnly ? state.savedEventIds.join(',') : null,
+    );
     final visibleEvents = vm.visibleEvents(widget.clock());
 
     return RefreshIndicator(
@@ -320,16 +327,20 @@ class _EventsScreenState extends State<EventsScreen> {
                   kPageGutter,
                   12,
                 ),
-                child: _EventCard(
-                  event: event,
-                  saved: appState.isEventSaved(event.id),
-                  saving: appState.savingEvent(event.id),
-                  onSave: () => appState.toggleEventSaved(event.id),
-                  onTap: () => Navigator.of(context).push(
-                    EventDetailScreen.route(
-                      event.id,
-                      entryPoint: EventEntryPoint.events,
-                      preview: event,
+                child: _EventSaveState(
+                  eventId: event.id,
+                  builder: (saved, saving) => _EventCard(
+                    event: event,
+                    saved: saved,
+                    saving: saving,
+                    onSave: () =>
+                        context.read<AppState>().toggleEventSaved(event.id),
+                    onTap: () => Navigator.of(context).push(
+                      EventDetailScreen.route(
+                        event.id,
+                        entryPoint: EventEntryPoint.events,
+                        preview: event,
+                      ),
                     ),
                   ),
                 ),
@@ -337,6 +348,23 @@ class _EventsScreenState extends State<EventsScreen> {
         ],
       ),
     );
+  }
+}
+
+/// One event's saved state, rebuilt alone when that event is saved or
+/// unsaved, instead of rebuilding every card on the screen.
+class _EventSaveState extends StatelessWidget {
+  const _EventSaveState({required this.eventId, required this.builder});
+
+  final int eventId;
+  final Widget Function(bool saved, bool saving) builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final (saved, saving) = context.select<AppState, (bool, bool)>(
+      (state) => (state.isEventSaved(eventId), state.savingEvent(eventId)),
+    );
+    return builder(saved, saving);
   }
 }
 

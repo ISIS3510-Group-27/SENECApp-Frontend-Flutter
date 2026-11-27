@@ -24,6 +24,34 @@ class OrgImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Micro-optimization (Sprint 4): decode the photo at the size it's drawn,
+    // not at the file's size. A 900x600 cover decoded in full takes ~2.1 MB of
+    // the image cache even on a 56 px list tile; decoded at the tile's size
+    // in physical pixels it takes a few KB, so dozens of covers fit in the
+    // cache instead of a handful, and scrolling doesn't evict and re-decode.
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          _image(context, _decodeWidth(context, constraints)),
+    );
+  }
+
+  /// The drawn width in physical pixels, rounded up to a multiple of 64 so
+  /// slightly different layouts share one decoded copy; `null` (full size)
+  /// when the width isn't bounded.
+  static int? _decodeWidth(BuildContext context, BoxConstraints constraints) {
+    // Covers are 3:2 and drawn with BoxFit.cover, so a slot taller than 3:2
+    // (a square tile) crops the sides and needs 1.5x its height in width.
+    final fromWidth = constraints.hasBoundedWidth ? constraints.maxWidth : 0.0;
+    final fromHeight = constraints.hasBoundedHeight
+        ? constraints.maxHeight * 1.5
+        : 0.0;
+    final width = fromWidth > fromHeight ? fromWidth : fromHeight;
+    if (width == 0) return null;
+    final pixels = width * MediaQuery.devicePixelRatioOf(context);
+    return ((pixels / 64).ceil() * 64).clamp(64, 2048);
+  }
+
+  Widget _image(BuildContext context, int? decodeWidth) {
     final fallback = _Fallback(rso: rso, iconSize: iconSize);
 
     // An uploaded photo, from the phone's copy when it's there.
@@ -35,6 +63,7 @@ class OrgImage extends StatelessWidget {
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
+        memCacheWidth: decodeWidth,
         // The gradient shows while the photo downloads, and stays if it fails
         // (offline, and never downloaded before).
         placeholder: (_, _) => fallback,
@@ -48,6 +77,7 @@ class OrgImage extends StatelessWidget {
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
+        cacheWidth: decodeWidth,
         errorBuilder: (_, _, _) => fallback,
       );
     }

@@ -60,11 +60,28 @@ class EventsViewModel extends ChangeNotifier {
 
   /// What the list shows: the selected list (or the saved events), narrowed
   /// by the search and the date filter. `null` while loading.
+  ///
+  /// Micro-optimization (Sprint 4): the screen rebuilds far more often than
+  /// any of these inputs change (every AppState change, every save tapped,
+  /// pull-to-refresh spinners), so the last result is kept and only worked
+  /// out again when the list, the search, the date filter, the saved events
+  /// (in the Saved view) or the day change.
   List<CampusEvent>? visibleEvents(DateTime now) {
     final events = this.events;
     if (events == null) return null;
     final all = _events[false] ?? events;
-    return filterEvents(
+    final source = _savedOnly ? all : events;
+    final key = _VisibleKey(
+      source: source,
+      query: _query,
+      dateFilter: _dateFilter,
+      savedIds: _savedOnly ? _appState.savedEventIds.join(',') : null,
+      day: DateTime(now.year, now.month, now.day),
+    );
+    if (_visible case (final cachedKey, final cached) when cachedKey == key) {
+      return cached;
+    }
+    final result = filterEvents(
       events: _savedOnly
           ? all.where((event) => _appState.isEventSaved(event.id)).toList()
           : events,
@@ -72,7 +89,11 @@ class EventsViewModel extends ChangeNotifier {
       dateFilter: _dateFilter,
       now: now,
     );
+    _visible = (key, result);
+    return result;
   }
+
+  (_VisibleKey, List<CampusEvent>)? _visible;
 
   void start() => load(joinedOnly: false);
 
@@ -150,4 +171,36 @@ class EventsViewModel extends ChangeNotifier {
     _appState.removeListener(_onAppStateChanged);
     super.dispose();
   }
+}
+
+/// What [EventsViewModel.visibleEvents] depends on. The list is compared by
+/// identity: a fetch always stores a new list.
+@immutable
+class _VisibleKey {
+  const _VisibleKey({
+    required this.source,
+    required this.query,
+    required this.dateFilter,
+    required this.savedIds,
+    required this.day,
+  });
+
+  final List<CampusEvent> source;
+  final String query;
+  final EventDateFilter dateFilter;
+  final String? savedIds;
+  final DateTime day;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _VisibleKey &&
+      identical(other.source, source) &&
+      other.query == query &&
+      other.dateFilter == dateFilter &&
+      other.savedIds == savedIds &&
+      other.day == day;
+
+  @override
+  int get hashCode =>
+      Object.hash(identityHashCode(source), query, dateFilter, savedIds, day);
 }

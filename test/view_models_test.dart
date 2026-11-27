@@ -143,6 +143,37 @@ void main() {
       vm.dispose();
     });
 
+    test('the visible list is reused until an input changes', () async {
+      final state = appState();
+      final vm = EventsViewModel(
+        events: services.events,
+        appState: state,
+        analytics: services.analytics,
+      )..start();
+      await settle();
+      final now = DateTime.now();
+      final first = vm.visibleEvents(now)!;
+
+      // Rebuilds with the same inputs get the same list, not a new filter.
+      expect(vm.visibleEvents(now), same(first));
+      expect(
+        vm.visibleEvents(now.add(const Duration(seconds: 1))),
+        same(first),
+      );
+
+      vm.setQuery('tennis');
+      final searched = vm.visibleEvents(now)!;
+      expect(searched, isNot(same(first)));
+
+      // In the Saved view, saving an event changes the list.
+      vm.clearFilters();
+      vm.showSaved();
+      expect(vm.visibleEvents(now), isEmpty);
+      await state.toggleEventSaved(first.first.id);
+      expect(vm.visibleEvents(now)!.map((e) => e.id), [first.first.id]);
+      vm.dispose();
+    });
+
     test('a failed load becomes a message', () async {
       backend.failing.add('/events');
       final vm = EventsViewModel(
