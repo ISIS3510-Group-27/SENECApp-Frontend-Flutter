@@ -1,0 +1,15 @@
+{
+  "kind": "emulator",
+  "serial": "emulator-5560",
+  "properties": {
+    "ro.product.model": "Android Slim SDK built for arm64",
+    "ro.build.version.release": "11",
+    "ro.build.version.sdk": "30",
+    "ro.build.fingerprint": "Android/sdk_slim_arm64/emulator_arm64:11/RSR1.210722.013.A7/10811891:userdebug/test-keys",
+    "persist.sys.timezone": "America/Bogota"
+  },
+  "cores": 2,
+  "memory_mb": 1536,
+  "gpu": "swiftshader",
+  "animations_disabled": true
+}

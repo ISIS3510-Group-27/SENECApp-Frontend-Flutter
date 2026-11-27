@@ -132,4 +132,62 @@ void main() {
 
     expect(result.map((event) => event.id), [2, 1, 3]);
   });
+
+  test(
+    'no filters preserve input order and cancelled events in a new list',
+    () {
+      final events = [
+        event(
+          id: 2,
+          title: 'Cancelled',
+          rso: 'A',
+          startsAt: DateTime(2026, 10, 3),
+          cancelled: true,
+        ),
+        event(
+          id: 1,
+          title: 'Earlier',
+          rso: 'A',
+          startsAt: DateTime(2026, 10, 2),
+        ),
+      ];
+      final result = filterEvents(
+        events: events,
+        query: '  \t ',
+        dateFilter: EventDateFilter.any,
+        now: DateTime(2026, 10, 2),
+      );
+      expect(result.map((event) => event.id), [2, 1]);
+      result.clear();
+      expect(events, hasLength(2));
+    },
+  );
+
+  test(
+    'date bounds are refreshed when a new filtering call crosses midnight',
+    () {
+      final events = [
+        event(
+          id: 1,
+          title: 'Last minute',
+          rso: 'A',
+          startsAt: DateTime(2026, 10, 2, 23, 59),
+        ),
+        event(
+          id: 2,
+          title: 'Midnight',
+          rso: 'A',
+          startsAt: DateTime(2026, 10, 3),
+        ),
+      ];
+      List<int> today(DateTime now) => filterEvents(
+        events: events,
+        query: '',
+        dateFilter: EventDateFilter.today,
+        now: now,
+      ).map((event) => event.id).toList();
+      expect(today(DateTime(2026, 10, 2, 23, 59)), [1]);
+      expect(today(DateTime(2026, 10, 3)), [2]);
+    },
+  );
 }
