@@ -12,6 +12,7 @@ import '../../data/models/entry_point.dart';
 import '../../data/push/push_service.dart';
 import '../../state/app_state.dart';
 import '../../state/connection_status.dart';
+import '../../state/session_controller.dart';
 import '../create_rso/create_rso_screen.dart';
 import '../discover/discover_screen.dart';
 import '../event_detail/event_detail_screen.dart';
@@ -131,14 +132,37 @@ class _HomeShellState extends State<HomeShell> {
   /// attendance) is fetched again, and analytics queued offline go out. Each
   /// screen refreshes its own list the same way.
   void _onReconnected() {
+    final services = context.read<AppServices>();
     context.read<AppState>().load();
-    context.read<AppServices>().analytics.flush();
+    // Loaded at start-up rather than by a screen, so no screen refreshes them:
+    // after an offline start they'd stay "saved on the phone" (and the
+    // "Can't reach SENECApp" banner would stay up) until the next launch.
+    unawaited(context.read<SessionController>().refreshProfile());
+    unawaited(
+      _refreshInBackground([
+        services.me.schedule,
+        services.catalog.interests,
+        services.catalog.buildings,
+      ]),
+    );
+    services.analytics.flush();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Back online. Updating your groups and events.'),
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  /// Runs each fetch once; one that fails keeps its saved copy until the next
+  /// return of the connection.
+  static Future<void> _refreshInBackground(
+    List<Future<Object?> Function()> fetches,
+  ) async {
+    await Future.wait([
+      for (final fetch in fetches)
+        fetch().then<void>((_) {}, onError: (Object _) {}),
+    ]);
   }
 
   /// The system doesn't show pushes while the app is open, so the app does.

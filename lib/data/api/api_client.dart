@@ -80,6 +80,17 @@ class ApiClient {
     Object? body,
   }) => _send('PATCH', path, query: query, body: body);
 
+  /// Whether the backend answers right now (`GET /health`). Any HTTP answer
+  /// below 500 counts: what matters is that requests get through.
+  Future<bool> reachable() async {
+    try {
+      await get('/health');
+      return true;
+    } on ApiException catch (e) {
+      return !e.isUnreachable;
+    }
+  }
+
   Future<dynamic> delete(String path, {Map<String, Object?>? query}) =>
       _send('DELETE', path, query: query);
 
