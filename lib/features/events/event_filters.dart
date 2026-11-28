@@ -23,20 +23,34 @@ List<CampusEvent> filterEvents({
       .where((term) => term.isNotEmpty)
       .toList();
 
+  if (terms.isEmpty && dateFilter == EventDateFilter.any) {
+    return List.of(events);
+  }
+
+  // Date bounds belong to this filtering call, not to each event in the list.
+  final start = dateFilter == EventDateFilter.any
+      ? null
+      : DateTime(now.year, now.month, now.day);
+  final end = start?.add(
+    Duration(days: dateFilter == EventDateFilter.today ? 1 : 7),
+  );
+
   final filtered = events.where((event) {
-    if (event.isCancelled && dateFilter != EventDateFilter.any) return false;
-    if (!_matchesDate(event, dateFilter, now)) return false;
+    if (start != null &&
+        (event.isCancelled ||
+            event.startsAt.isBefore(start) ||
+            !event.startsAt.isBefore(end!))) {
+      return false;
+    }
     if (terms.isEmpty) return true;
 
     return terms.every(_searchText(event).contains);
   }).toList();
 
-  if (terms.isNotEmpty || dateFilter != EventDateFilter.any) {
-    filtered.sort((a, b) {
-      final time = a.startsAt.compareTo(b.startsAt);
-      return time == 0 ? a.id.compareTo(b.id) : time;
-    });
-  }
+  filtered.sort((a, b) {
+    final time = a.startsAt.compareTo(b.startsAt);
+    return time == 0 ? a.id.compareTo(b.id) : time;
+  });
   return filtered;
 }
 

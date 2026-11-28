@@ -37,7 +37,7 @@ class MemoryEventDraftStore implements EventDraftStore {
   }
 }
 
-/// Mobile drafts are committed to SQLite before the UI confirms a save.
+/// Legacy mobile drafts, read by HiveEventDraftStore during migration.
 class SqliteEventDraftStore implements EventDraftStore {
   SqliteEventDraftStore({DatabaseFactory? factory, String? databasePath})
     : _factory = factory ?? databaseFactory,
@@ -114,7 +114,7 @@ class SqliteEventDraftStore implements EventDraftStore {
   }
 }
 
-/// Browser fallback; mobile uses SQLite, not preferences, for draft durability.
+/// Browser fallback; mobile uses Hive, not preferences, for draft durability.
 class PrefsEventDraftStore implements EventDraftStore {
   const PrefsEventDraftStore(this.preferences);
 

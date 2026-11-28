@@ -1,0 +1,166 @@
+{
+  "outputs_identical": true,
+  "checksum": 9795000,
+  "rows": [
+    {
+      "events": 50,
+      "scenario": "all",
+      "before_median_us": 11.9756,
+      "after_median_us": 0.3776,
+      "reduction_percent": 96.8469220748856,
+      "before_range_us": [
+        11.6232,
+        13.7364
+      ],
+      "after_range_us": [
+        0.2352,
+        0.6754
+      ],
+      "observations_per_variant": 9
+    },
+    {
+      "events": 50,
+      "scenario": "search",
+      "before_median_us": 29.3436,
+      "after_median_us": 18.4764,
+      "reduction_percent": 37.03431071852123,
+      "before_range_us": [
+        29.0438,
+        30.2774
+      ],
+      "after_range_us": [
+        18.1962,
+        19.1512
+      ],
+      "observations_per_variant": 9
+    },
+    {
+      "events": 50,
+      "scenario": "search_week",
+      "before_median_us": 19.5842,
+      "after_median_us": 5.2482,
+      "reduction_percent": 73.2018668110007,
+      "before_range_us": [
+        19.4406,
+        21.576
+      ],
+      "after_range_us": [
+        5.1852,
+        5.4336
+      ],
+      "observations_per_variant": 9
+    },
+    {
+      "events": 50,
+      "scenario": "today",
+      "before_median_us": 15.0142,
+      "after_median_us": 1.7664,
+      "reduction_percent": 88.23513740325825,
+      "before_range_us": [
+        14.7186,
+        15.6752
+      ],
+      "after_range_us": [
+        1.5198,
+        2.4634
+      ],
+      "observations_per_variant": 9
+    },
+    {
+      "events": 50,
+      "scenario": "week",
+      "before_median_us": 29.564,
+      "after_median_us": 15.4068,
+      "reduction_percent": 47.88661886077662,
+      "before_range_us": [
+        28.7406,
+        30.4924
+      ],
+      "after_range_us": [
+        15.154,
+        16.182
+      ],
+      "observations_per_variant": 9
+    },
+    {
+      "events": 160,
+      "scenario": "all",
+      "before_median_us": 36.4156,
+      "after_median_us": 0.399,
+      "reduction_percent": 98.9043157328178,
+      "before_range_us": [
+        35.9758,
+        38.4192
+      ],
+      "after_range_us": [
+        0.3722,
+        0.52
+      ],
+      "observations_per_variant": 9
+    },
+    {
+      "events": 160,
+      "scenario": "search",
+      "before_median_us": 105.168,
+      "after_median_us": 66.2908,
+      "reduction_percent": 36.96675794918607,
+      "before_range_us": [
+        103.5038,
+        105.6224
+      ],
+      "after_range_us": [
+        65.209,
+        68.1032
+      ],
+      "observations_per_variant": 9
+    },
+    {
+      "events": 160,
+      "scenario": "search_week",
+      "before_median_us": 66.6986,
+      "after_median_us": 20.9474,
+      "reduction_percent": 68.593943501063,
+      "before_range_us": [
+        65.6414,
+        66.9684
+      ],
+      "after_range_us": [
+        20.55,
+        21.5914
+      ],
+      "observations_per_variant": 9
+    },
+    {
+      "events": 160,
+      "scenario": "today",
+      "before_median_us": 48.4322,
+      "after_median_us": 5.3232,
+      "reduction_percent": 89.00896510998881,
+      "before_range_us": [
+        47.367,
+        51.7428
+      ],
+      "after_range_us": [
+        5.2074,
+        5.4536
+      ],
+      "observations_per_variant": 9
+    },
+    {
+      "events": 160,
+      "scenario": "week",
+      "before_median_us": 104.78,
+      "after_median_us": 62.3284,
+      "reduction_percent": 40.51498377552968,
+      "before_range_us": [
+        103.0594,
+        105.897
+      ],
+      "after_range_us": [
+        61.5392,
+        65.1718
+      ],
+      "observations_per_variant": 9
+    }
+  ]
+}
