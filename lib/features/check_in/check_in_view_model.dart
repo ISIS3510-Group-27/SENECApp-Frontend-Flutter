@@ -1,3 +1,4 @@
+import '../../state/check_in_outbox.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -18,6 +19,7 @@ import '../../data/repositories/events_repository.dart';
 class CheckInViewModel extends ChangeNotifier {
   CheckInViewModel({
     this.event,
+    this.outbox,
     required EventsRepository events,
     required LocationService location,
     required bool Function() locationOptIn,
@@ -31,12 +33,23 @@ class CheckInViewModel extends ChangeNotifier {
        _onCheckedIn = onCheckedIn,
        _analytics = analytics,
        _isOnline = isOnline ?? _alwaysOnline {
-    _reconnected = reconnected?.listen((_) => sendPending());
+    if (outbox == null) {
+      _reconnected = reconnected?.listen((_) => sendPending());
+    }
+    _outboxChanges = outbox?.changes.listen((change) {
+      if (_disposed || _pending?.eventId != change.$1) return;
+      _pending = null;
+      _result = change.$2;
+      _refusal = change.$3?.message;
+      notifyListeners();
+    });
   }
 
   static bool _alwaysOnline() => true;
 
   final CampusEvent? event;
+  final CheckInOutbox? outbox;
+  StreamSubscription<Object?>? _outboxChanges;
 
   final EventsRepository _events;
   final LocationService _location;
@@ -137,19 +150,22 @@ class CheckInViewModel extends ChangeNotifier {
 
   /// The student gave up on the scan that was waiting.
   void cancelPending() {
+    final id = _pending?.eventId;
+    if (id != null) outbox?.cancel(id);
     _pending = null;
     notifyListeners();
   }
 
   Future<void> _send(_Scan scan) async {
-    if (!_isOnline()) {
+    if (outbox == null && !_isOnline()) {
       _pending = scan;
       _submitting = false;
       notifyListeners();
       return;
     }
     try {
-      final result = await _events.checkIn(
+      final send = outbox?.submit ?? _events.checkIn;
+      final result = await send(
         scan.eventId,
         code: scan.code,
         latitude: scan.latitude,
@@ -161,7 +177,7 @@ class CheckInViewModel extends ChangeNotifier {
       _onCheckedIn();
     } on ApiException catch (e) {
       if (_disposed) return;
-      if (e.isNetworkError) {
+      if (e.isUnreachable) {
         // The connection dropped on the way: keep the scan for when it's back.
         _pending = scan;
         return;
@@ -192,6 +208,7 @@ class CheckInViewModel extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _reconnected?.cancel();
+    _outboxChanges?.cancel();
     super.dispose();
   }
 }

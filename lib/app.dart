@@ -1,3 +1,4 @@
+import 'state/check_in_outbox.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -115,6 +116,21 @@ class _SessionGate extends StatelessWidget {
                 preferences: services.preferences,
               )..start();
             },
+          ),
+          Provider<CheckInOutbox>(
+            lazy: false,
+            create: (context) {
+              final services = context.read<AppServices>();
+              final state = context.read<AppState>();
+              return CheckInOutbox(
+                account: session.student!.email,
+                events: services.events,
+                preferences: services.preferences,
+                onCheckedIn: state.refreshAttendance,
+                reconnected: context.read<ConnectionStatus>().reconnected,
+              )..start();
+            },
+            dispose: (_, outbox) => outbox.dispose(),
           ),
           Provider<_InsightsLease>(
             lazy: false,

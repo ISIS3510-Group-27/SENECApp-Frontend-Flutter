@@ -110,6 +110,7 @@ class JoinSourcesRepository {
     final history = owner == null
         ? const <JoinSnapshot>[]
         : await _recent(owner, groupId);
+    if (owner != _account) return;
     final saved = history.isEmpty ? null : history.first;
     final previous = _previousVisit(history);
     if (saved != null) {
@@ -125,6 +126,17 @@ class JoinSourcesRepository {
     try {
       fresh = JoinSources.fromJson((await fetching)! as Map<String, dynamic>);
     } on ApiException catch (e) {
+      if (owner != _account) return;
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        _memory.clear();
+        if (owner != null) {
+          try {
+            await _store.clear(owner);
+          } on Object catch (error) {
+            debugPrint('Join history: $error');
+          }
+        }
+      }
       if (!e.isUnreachable || saved == null) rethrow;
       yield JoinSourcesView(
         current: saved.sources,
