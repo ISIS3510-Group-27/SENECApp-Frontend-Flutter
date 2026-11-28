@@ -603,6 +603,61 @@ class FakeBackend {
           'by_building': [cell],
         });
 
+      case ('GET', ['groups', final id, 'insights', 'health']):
+        if (!adminOf.contains(int.parse(id))) {
+          return jsonResponse({'detail': 'Only group admins can do this'}, 403);
+        }
+        final counts = [6, 6, 7, 6, 3, 2, 2, 1];
+        final start = DateTime.utc(2026, 10, 1);
+        return jsonResponse({
+          'question':
+              'Which active student groups show a decline in participation '
+              '(>30% over four consecutive weeks), and which re-engagement '
+              'feature produces the higher return to attendance rate: event '
+              'reminders or group messages?',
+          'answer':
+              '1 groups declined >30% over four weeks (Tennis Uniandes). '
+              'Event reminders produced the higher return-to-attendance rate '
+              '(50% vs 25%).',
+          'weeks': [
+            for (var i = 0; i < counts.length; i++)
+              {
+                'week_start': start
+                    .add(Duration(days: 7 * i))
+                    .toIso8601String(),
+                'attendance': counts[i],
+              },
+          ],
+          'baseline': 6.25,
+          'recent': 2.0,
+          'decline_pct': 0.68,
+          'declining': true,
+          'case': {
+            'arm': 'event_reminders',
+            'status': 'active',
+            'detected_at': '2026-11-20T11:00:00Z',
+            'lapsed_members': 4,
+            'returned_members': 2,
+            'return_rate': 0.5,
+          },
+          'arms': [
+            {
+              'arm': 'event_reminders',
+              'groups': 2,
+              'lapsed': 8,
+              'returned': 4,
+              'return_to_attendance_rate': 0.5,
+            },
+            {
+              'arm': 'group_messages',
+              'groups': 2,
+              'lapsed': 8,
+              'returned': 2,
+              'return_to_attendance_rate': 0.25,
+            },
+          ],
+        });
+
       case ('GET', ['groups', final id, 'insights', 'profile']):
         if (!adminOf.contains(int.parse(id))) {
           return jsonResponse({'detail': 'Only group admins can do this'}, 403);

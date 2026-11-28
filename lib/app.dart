@@ -157,6 +157,7 @@ class _SessionGate extends StatelessWidget {
 class _InsightsLease {
   _InsightsLease(this._services, String account) {
     _services.insights.useAccount(account);
+    _services.health.useAccount(account);
     _services.joinSources.useAccount(account);
   }
 
@@ -164,6 +165,7 @@ class _InsightsLease {
 
   void release() {
     _services.insights.useAccount(null);
+    _services.health.useAccount(null);
     _services.joinSources.useAccount(null);
   }
 }
