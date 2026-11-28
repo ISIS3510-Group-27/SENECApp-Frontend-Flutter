@@ -74,6 +74,7 @@ class JoinSourcesViewModel extends ChangeNotifier {
             if (e is ApiException) {
               _analytics.error(e, screen: Screens.joinSources);
               // An answer on screen stays: the error only matters without one.
+              if (e.statusCode == 401 || e.statusCode == 403) _view = null;
               if (_view == null) _error = e;
             } else {
               debugPrint('Join sources: $e');

@@ -54,6 +54,7 @@ class GroupHealthRepository {
     }
 
     var stored = owner == null ? null : await _read(owner, groupId);
+    if (owner != _account) throw const ApiException(401, 'Session changed.');
     if (stored != null) {
       final age = _clock().difference(stored.savedAt);
       if (age > keepFor) {

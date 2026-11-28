@@ -55,6 +55,7 @@ class FileInsightStore implements InsightStore {
     : _directory = directory ?? getApplicationSupportDirectory;
 
   final Future<Directory> Function() _directory;
+  Future<void> _writes = Future.value();
 
   static String _name(String text) =>
       base64Url.encode(utf8.encode(text)).replaceAll('=', '');
@@ -86,20 +87,19 @@ class FileInsightStore implements InsightStore {
   }
 
   @override
-  Future<void> write(
-    String account,
-    String key,
-    Object? body,
-    DateTime at,
-  ) async {
-    final file = await _file(account, key);
-    final temporary = File('${file.path}.tmp');
-    await temporary.writeAsString(
-      jsonEncode({'saved_at': at.toIso8601String(), 'body': body}),
-      flush: true,
-    );
-    await _delete(file);
-    await temporary.rename(file.path);
+  Future<void> write(String account, String key, Object? body, DateTime at) {
+    final encoded = jsonEncode({
+      'saved_at': at.toIso8601String(),
+      'body': body,
+    });
+    final operation = _writes.then((_) async {
+      final file = await _file(account, key);
+      final temporary = File('${file.path}.tmp');
+      await temporary.writeAsString(encoded, flush: true);
+      await temporary.rename(file.path);
+    });
+    _writes = operation.then((_) {}, onError: (Object _) {});
+    return operation;
   }
 
   @override

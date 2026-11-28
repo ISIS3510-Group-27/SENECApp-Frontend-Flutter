@@ -1,3 +1,4 @@
+import '../../state/check_in_outbox.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -44,6 +45,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
     final services = context.read<AppServices>();
     return CheckInViewModel(
       event: widget.event,
+      outbox: context.read<CheckInOutbox?>(),
       events: services.events,
       location: services.location,
       locationOptIn: () => context.read<AppState>().student.locationOptIn,

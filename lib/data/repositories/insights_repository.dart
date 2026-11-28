@@ -109,6 +109,7 @@ class InsightsRepository extends ChangeNotifier {
     }
 
     var stored = owner == null ? null : await _read(owner, key);
+    if (owner != _account) throw const ApiException(401, 'Session changed.');
     final age = stored == null ? null : _clock().difference(stored.savedAt);
     if (stored != null && age! > keepFor) {
       stored = null;
