@@ -30,7 +30,11 @@ class SenecApp extends StatelessWidget {
       providers: [
         Provider.value(value: services),
         ChangeNotifierProvider(
-          create: (_) => ConnectionStatus(services.connectivity)..start(),
+          create: (_) => ConnectionStatus(
+            services.connectivity,
+            reachable: services.api.reachable,
+            showingSavedCopy: () => services.offline.freshness.anyCached,
+          )..start(),
         ),
         ChangeNotifierProvider.value(value: services.offline.freshness),
         ChangeNotifierProvider.value(value: services.coverUpdates),

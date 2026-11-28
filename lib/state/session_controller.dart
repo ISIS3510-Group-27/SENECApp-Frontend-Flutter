@@ -198,6 +198,26 @@ class SessionController extends ChangeNotifier {
     }
   }
 
+  /// Fetches the profile again without leaving the home screen, after the
+  /// connection returns. A session restored offline shows the profile saved
+  /// on the phone; until it's fetched again the app keeps saying it is
+  /// showing a saved copy. Failures keep the current profile.
+  Future<void> refreshProfile() async {
+    if (_status != SessionStatus.signedIn) return;
+    try {
+      final student = await _me.fetch();
+      if (_status != SessionStatus.signedIn) return;
+      _student = student;
+      notifyListeners();
+      // Registering the device for pushes may have failed offline too.
+      unawaited(_push?.register());
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        await signOut(reason: e.message);
+      }
+    }
+  }
+
   void _onUnauthorized() {
     if (_status == SessionStatus.signedIn) {
       signOut(reason: 'Your session expired. Sign in again.');

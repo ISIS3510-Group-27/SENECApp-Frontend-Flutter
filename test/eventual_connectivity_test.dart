@@ -35,6 +35,106 @@ void main() {
       status.dispose();
     });
 
+    testWidgets('waits until the backend answers before announcing a return', (
+      tester,
+    ) async {
+      final network = FakeConnectivity()..connected = false;
+      var backendUp = false;
+      var probes = 0;
+      final status = ConnectionStatus(
+        network,
+        reachable: () async {
+          probes++;
+          return backendUp;
+        },
+      )..start();
+      final returns = <void>[];
+      status.reconnected.listen(returns.add);
+      await tester.pump();
+
+      network.set(connected: true);
+      await tester.pump();
+      expect(status.online, isTrue);
+      expect(returns, isEmpty, reason: 'the backend does not answer yet');
+
+      backendUp = true;
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
+      expect(returns, hasLength(1));
+      expect(probes, 2);
+
+      // Nothing else fires later.
+      await tester.pump(const Duration(seconds: 20));
+      expect(returns, hasLength(1));
+      status.dispose();
+    });
+
+    testWidgets('a return lost again before the backend answers is dropped', (
+      tester,
+    ) async {
+      final network = FakeConnectivity()..connected = false;
+      final status = ConnectionStatus(network, reachable: () async => false)
+        ..start();
+      final returns = <void>[];
+      status.reconnected.listen(returns.add);
+      await tester.pump();
+
+      network.set(connected: true);
+      await tester.pump();
+      network.set(connected: false);
+      await tester.pump(const Duration(seconds: 20));
+
+      expect(returns, isEmpty);
+      status.dispose();
+    });
+
+    testWidgets('announces anyway after the last check, so screens still try', (
+      tester,
+    ) async {
+      final network = FakeConnectivity()..connected = false;
+      final status = ConnectionStatus(network, reachable: () async => false)
+        ..start();
+      final returns = <void>[];
+      status.reconnected.listen(returns.add);
+      await tester.pump();
+
+      network.set(connected: true);
+      await tester.pump(const Duration(seconds: 16));
+      await tester.pump();
+
+      expect(returns, hasLength(1));
+      status.dispose();
+    });
+
+    testWidgets('announces again while screens still show the saved copy', (
+      tester,
+    ) async {
+      final network = FakeConnectivity()..connected = false;
+      var stale = true;
+      final status = ConnectionStatus(
+        network,
+        reachable: () async => true,
+        showingSavedCopy: () => stale,
+      )..start();
+      final returns = <void>[];
+      status.reconnected.listen(returns.add);
+      await tester.pump();
+
+      network.set(connected: true);
+      await tester.pump();
+      expect(returns, hasLength(1));
+
+      // A reload failed: the copy is still on screen, so it tries again.
+      await tester.pump(ConnectionStatus.staleCheckAfter);
+      expect(returns, hasLength(2));
+
+      // That one worked: no more announcements.
+      stale = false;
+      await tester.pump(ConnectionStatus.staleCheckAfter * 3);
+      expect(returns, hasLength(2));
+      status.dispose();
+    });
+
     test('starts from the real state of the network', () async {
       final network = FakeConnectivity()..connected = false;
       final status = ConnectionStatus(network)..start();
