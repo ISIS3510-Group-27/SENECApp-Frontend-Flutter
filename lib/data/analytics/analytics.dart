@@ -30,6 +30,7 @@ abstract final class Screens {
   static const schedule = 'schedule';
   static const adminRequests = 'admin_requests';
   static const profileTips = 'profile_tips';
+  static const groupHealth = 'group_health';
   static const joinSources = 'join_sources';
   static const compareGroups = 'compare_groups';
 
@@ -40,6 +41,7 @@ abstract final class Screens {
     groupDetail ||
     adminRequests ||
     profileTips ||
+    groupHealth ||
     joinSources => 'group_profile',
     joinForm => 'join',
     recommendations || compareGroups => 'recommendations',

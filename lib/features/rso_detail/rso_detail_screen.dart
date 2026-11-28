@@ -27,6 +27,7 @@ import '../../state/connection_status.dart';
 import '../../state/cover_outbox.dart';
 import '../create_event/create_event_screen.dart';
 import '../event_detail/event_detail_screen.dart';
+import '../group_health/group_health_screen.dart';
 import '../join_sources/join_sources_screen.dart';
 import '../profile_tips/profile_tips_screen.dart';
 import '../shell/track_screen.dart';
@@ -874,6 +875,11 @@ class _LeaderToolsState extends State<_LeaderTools> {
         ),
         const SizedBox(height: 10),
         PrimaryButton.secondary(
+          label: 'Group health',
+          onPressed: _openGroupHealth,
+        ),
+        const SizedBox(height: 10),
+        PrimaryButton.secondary(
           label: 'Where your members come from',
           onPressed: widget.rso.isApproved ? _openJoinSources : null,
         ),
@@ -886,6 +892,10 @@ class _LeaderToolsState extends State<_LeaderTools> {
         ),
       ],
     );
+  }
+
+  void _openGroupHealth() {
+    Navigator.of(context).push(GroupHealthScreen.route(widget.rso));
   }
 
   void _openProfileTips() {

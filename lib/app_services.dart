@@ -1,5 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:hive/hive.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/config/app_config.dart';
@@ -19,6 +21,7 @@ import 'data/local/offline_cache.dart';
 import 'data/local/sqlite_local_store.dart';
 import 'data/location/location_service.dart';
 import 'data/local/cover_outbox_store.dart';
+import 'data/local/health_store.dart';
 import 'data/local/insight_store.dart';
 import 'data/local/join_history_store.dart';
 import 'data/location/maps_service.dart';
@@ -26,6 +29,7 @@ import 'data/push/push_service.dart';
 import 'data/reminders/reminder_notifications.dart';
 import 'data/repositories/catalog_repository.dart';
 import 'data/repositories/events_repository.dart';
+import 'data/repositories/group_health_repository.dart';
 import 'data/repositories/groups_repository.dart';
 import 'data/repositories/insights_repository.dart';
 import 'data/repositories/join_sources_repository.dart';
@@ -59,11 +63,13 @@ class AppServices {
     EventDraftStore? eventDrafts,
     CoverOutboxStore? coverOutbox,
     InsightStore? insightStore,
+    HealthStore? healthStore,
     JoinHistoryStore? joinHistory,
   }) : analytics = analytics ?? Analytics(api: api, context: api.context),
        eventDrafts = eventDrafts ?? MemoryEventDraftStore(),
        coverOutbox = coverOutbox ?? MemoryCoverOutboxStore(),
        insightStore = insightStore ?? MemoryInsightStore(),
+       healthStore = healthStore ?? MemoryHealthStore(),
        joinHistory = joinHistory ?? MemoryJoinHistoryStore(),
        offline = OfflineCache(store: store),
        recommendations = RecommendationsRepository(api);
@@ -105,6 +111,7 @@ class AppServices {
 
   final InsightStore insightStore;
 
+  final HealthStore healthStore;
   /// The BQ6 answers a leader saw, kept to open offline and compare visits.
   final JoinHistoryStore joinHistory;
 
@@ -121,6 +128,10 @@ class AppServices {
   late final InsightsRepository insights = InsightsRepository(
     api: api,
     store: insightStore,
+  );
+  late final GroupHealthRepository health = GroupHealthRepository(
+    api: api,
+    store: healthStore,
   );
   late final JoinSourcesRepository joinSources = JoinSourcesRepository(
     api: api,
@@ -141,6 +152,7 @@ class AppServices {
 
   static Future<AppServices> create() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!kIsWeb) Hive.init((await getApplicationSupportDirectory()).path);
     final AuthService auth;
     switch (AppConfig.authMode) {
       case AuthMode.firebase:
@@ -195,6 +207,7 @@ class AppServices {
           : HiveEventDraftStore(legacy: SqliteEventDraftStore()),
       coverOutbox: kIsWeb ? MemoryCoverOutboxStore() : SqliteCoverOutboxStore(),
       insightStore: kIsWeb ? MemoryInsightStore() : FileInsightStore(),
+      healthStore: HiveHealthStore(),
       joinHistory: kIsWeb ? MemoryJoinHistoryStore() : SqliteJoinHistoryStore(),
     );
   }
